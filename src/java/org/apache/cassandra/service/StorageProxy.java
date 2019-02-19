@@ -674,7 +674,7 @@ public class StorageProxy implements StorageProxyMBean
         });
     }
 
-  /**
+    /**
      * Use this method to have these Mutations applied
      * across all replicas. This method will take care
      * of the possibility of a replica being down and hint
@@ -772,7 +772,6 @@ public class StorageProxy implements StorageProxyMBean
         }
 
         mutateDoWrite(mutations, consistency_level, queryStartNanoTime, startTime);
-
     }
 
     public static void mutateWithTag(Collection<? extends IMutation> mutations, ConsistencyLevel consistency_level, long queryStartNanoTime)
