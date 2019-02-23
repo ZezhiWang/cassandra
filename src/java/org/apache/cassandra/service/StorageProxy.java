@@ -680,6 +680,13 @@ public class StorageProxy implements StorageProxyMBean
      * of the possibility of a replica being down and hint
      * the data across to some other replica.
      *
+     * this method is ABD operation write(v), however in the implementation,
+     * we support batch write, thus parameter contains a list of mutations.
+     * line numbers below correspond to those in Algorithm 3 in
+     * "Benchmarking the Performance of ABD Algorithm " by
+     * Guo-Shu (Sean) Gau, Zezhi (Herry) Wang*, Lewis Tseng, Kishori M. Konwar
+     * on SCNDS: 2nd Workshop on Storage, Control, Networking in Dynamic Systems (SCNDS), October 2018.
+     *
      * @param mutations the mutations to be applied across the replicas
      * @param consistency_level the consistency level for the operation
      * @param queryStartNanoTime the value of System.nanoTime() when the query started to be processed
@@ -712,15 +719,9 @@ public class StorageProxy implements StorageProxyMBean
         }
 
         HashMap<String, ABDTag> maxZMap = new HashMap<>();
+        // line 2: t_max = get-tag()
         List<ReadResponse> readList = fetchTagValue(zValueReadList, consistency_level, System.nanoTime());
-        List<PartitionIterator> piList = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : readList){
-            SinglePartitionReadCommand command = zValueReadList.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-        PartitionIterator zValueReadResult = PartitionIterators.concat(piList);
+        PartitionIterator zValueReadResult = prepIterator(zValueReadList, readList);
 
         while(zValueReadResult.hasNext())
         {
@@ -753,6 +754,8 @@ public class StorageProxy implements StorageProxyMBean
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
             long timeStamp = FBUtilities.timestampMicros();
             boolean containsKey = maxZMap.containsKey(mutation.key().toString());
+
+            // line 3: t_w <- (t.max.z+1, w)
             ABDTag nextTag =  containsKey ? maxZMap.get(mutation.key().toString()).nextTag() : new ABDTag();
 
             mutationBuilder.update(tableMetadata)
@@ -771,6 +774,7 @@ public class StorageProxy implements StorageProxyMBean
             newMutations.add(newMutation);
         }
 
+        // line 4: put-data(<t_w, v>)
         mutateDoWrite(mutations, consistency_level, queryStartNanoTime, startTime);
     }
 
@@ -1950,6 +1954,10 @@ public class StorageProxy implements StorageProxyMBean
         return PartitionIterators.concat(results);
     }
 
+    /**
+     * this method is ABD operation read(), however in the implementation,
+     * we support batch read, thus parameter contains a list of commands.
+     */
     private static PartitionIterator fetchRowsAbd(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
             throws UnavailableException, ReadFailureException, ReadTimeoutException {
         // first we have to create a full partition read based on the
@@ -1968,17 +1976,10 @@ public class StorageProxy implements StorageProxyMBean
 
         // execute the tag value read, the result will be the
         // tag value pair with the largest tag
-        
-        List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        List<PartitionIterator> piList = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : tagValueResult){
-            SinglePartitionReadCommand command = commands.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
 
-        PartitionIterator pi = PartitionIterators.concat(piList);
+        // line 7: <t_r, v> <- get-data()
+        List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
+        PartitionIterator pi = prepIterator(commands, tagValueResult);
         List<IMutation> mutationList = new ArrayList<>();
 
         // write the tag value pair with the largest tag to all servers
@@ -2019,17 +2020,12 @@ public class StorageProxy implements StorageProxyMBean
 
             // then we will have to perform the mutatation we've
             // just generated
+            // line 8: put-data(<t_r, v>)
             mutateWithTag(mutationList, consistencyLevel, System.nanoTime());
         }
 
-        piList.clear();
-        idx = 0;
-        for(ReadResponse rr : tagValueResult){
-            SinglePartitionReadCommand command = commands.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-        return PartitionIterators.concat(piList);
+        // line 9: return v
+        return prepIterator(commands, tagValueResult);
     }
 
     private static List<ReadResponse> fetchTagValue(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
@@ -2079,6 +2075,18 @@ public class StorageProxy implements StorageProxyMBean
             results.add(reads[i].getResult());
         }
         return results;
+    }
+
+    private static PartitionIterator prepIterator(List<SinglePartitionReadCommand> commands, List<ReadResponse> readResponseList) {
+        List<PartitionIterator> partitionIteratorList = new ArrayList<>();
+        int idx = 0;
+        for(ReadResponse rr : readResponseList){
+            SinglePartitionReadCommand command = commands.get(idx);
+            partitionIteratorList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
+            idx++;
+        }
+
+        return PartitionIterators.concat(partitionIteratorList);
     }
 
     public static class LocalReadRunnable extends DroppableRunnable
