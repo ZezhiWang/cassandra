@@ -688,7 +688,6 @@ public class StorageProxy implements StorageProxyMBean
     throws UnavailableException, OverloadedException, WriteTimeoutException, WriteFailureException
     {
         Tracing.trace("Determining replicas for mutation");
-        final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddressAndPort());
 
         long startTime = System.nanoTime();
 
@@ -772,87 +771,36 @@ public class StorageProxy implements StorageProxyMBean
             newMutations.add(newMutation);
         }
 
-        List<AbstractWriteResponseHandler<IMutation>> responseHandlers = new ArrayList<>(newMutations.size());
-
-        try
-        {
-            for (IMutation mutation : newMutations)
-            {
-                if (mutation instanceof CounterMutation)
-                {
-                    responseHandlers.add(mutateCounter((CounterMutation)mutation, localDataCenter, queryStartNanoTime));
-                }
-                else
-                {
-                    WriteType wt = newMutations.size() <= 1 ? WriteType.SIMPLE : WriteType.UNLOGGED_BATCH;
-                    responseHandlers.add(performWrite(mutation, consistency_level, localDataCenter, standardWritePerformer, null, wt, queryStartNanoTime));
-                }
-            }
-
-            // wait for writes.  throws TimeoutException if necessary
-            for (AbstractWriteResponseHandler<IMutation> responseHandler : responseHandlers)
-            {
-                responseHandler.get();
-            }
-        }
-        catch (WriteTimeoutException|WriteFailureException ex)
-        {
-            if (consistency_level == ConsistencyLevel.ANY)
-            {
-                hintMutations(newMutations);
-            }
-            else
-            {
-
-                if (ex instanceof WriteFailureException)
-                {
-                    writeMetrics.failures.mark();
-                    writeMetricsMap.get(consistency_level).failures.mark();
-                    WriteFailureException fe = (WriteFailureException)ex;
-                    Tracing.trace("Write failure; received {} of {} required replies, failed {} requests",
-                                  fe.received, fe.blockFor, fe.failureReasonByEndpoint.size());
-                }
-                else
-                {
-                    writeMetrics.timeouts.mark();
-                    writeMetricsMap.get(consistency_level).timeouts.mark();
-                    WriteTimeoutException te = (WriteTimeoutException)ex;
-                    Tracing.trace("Write timeout; received {} of {} required replies", te.received, te.blockFor);
-                }
-                throw ex;
-            }
-        }
-        catch (UnavailableException e)
-        {
-            writeMetrics.unavailables.mark();
-            writeMetricsMap.get(consistency_level).unavailables.mark();
-            Tracing.trace("Unavailable");
-            throw e;
-        }
-        catch (OverloadedException e)
-        {
-            writeMetrics.unavailables.mark();
-            writeMetricsMap.get(consistency_level).unavailables.mark();
-            Tracing.trace("Overloaded");
-            throw e;
-        }
-        finally
-        {
-            long latency = System.nanoTime() - startTime;
-            writeMetrics.addNano(latency);
-            writeMetricsMap.get(consistency_level).addNano(latency);
-            updateCoordinatorWriteLatencyTableMetric(newMutations, latency);
-        }
+        mutateDoWrite(mutations, consistency_level, queryStartNanoTime, startTime);
     }
 
     public static void mutateWithTag(Collection<? extends IMutation> mutations, ConsistencyLevel consistency_level, long queryStartNanoTime)
     throws UnavailableException, OverloadedException, WriteTimeoutException, WriteFailureException
     {
-        // this function is the same as the original mutate function
         Tracing.trace("Determining replicas for mutation");
-        final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddressAndPort());
 
         long startTime = System.nanoTime();
+
+        mutateDoWrite(mutations, consistency_level, queryStartNanoTime, startTime);
+    }
+
+    /**
+     * This function is almost the same as the Cassandra's original mutate(),
+     * and the only difference is that it takes an extra parameter mutateStartNanoTime:
+     * The original mutate() notes down the start time when the method is called
+     * but the ABD write (i.e. mutate() in the current implementation) --
+     * doing a majority read first before performing writes -- takes time
+     * so we need to pass in the actual start time of the ABD write.
+     * @param mutations the mutations to be applied across the replicas
+     * @param consistency_level the consistency level for the operation
+     * @param queryStartNanoTime the value of System.nanoTime() when the query started to be processed
+     * @param mutateStartNanoTime the value of System.nanoTime() when mutate() method is called
+     */
+    public static void mutateDoWrite(Collection<? extends IMutation> mutations, ConsistencyLevel consistency_level,
+                                     long queryStartNanoTime, long mutateStartNanoTime)
+    throws UnavailableException, OverloadedException, WriteTimeoutException, WriteFailureException
+    {
+        final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddressAndPort());
 
         List<AbstractWriteResponseHandler<IMutation>> responseHandlers = new ArrayList<>(mutations.size());
 
@@ -919,7 +867,7 @@ public class StorageProxy implements StorageProxyMBean
         }
         finally
         {
-            long latency = System.nanoTime() - startTime;
+            long latency = System.nanoTime() - mutateStartNanoTime;
             writeMetrics.addNano(latency);
             writeMetricsMap.get(consistency_level).addNano(latency);
             updateCoordinatorWriteLatencyTableMetric(mutations, latency);
