@@ -18,6 +18,8 @@
 
 package org.apache.cassandra.service.generic;
 
+import org.apache.cassandra.cql3.ColumnIdentifier;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,8 +27,13 @@ import java.util.Map;
 public class LocalCache
 {
 
-    public static Map<String,VTS> cache = Collections.synchronizedMap(new HashMap<>());
+    public static Map<String, ValueTimestamp> cache = Collections.synchronizedMap(new HashMap<>());
 
-
-
+    public static ValueTimestamp getVTS(String primaryKey){
+        return cache.get(primaryKey);
+    }
+    public static void setVTS(String primaryKey, ValueTimestamp valueTimestamp){
+       cache.put(primaryKey, valueTimestamp);
+    }
+    public static final ColumnIdentifier DATA_IDENTIFIER = new ColumnIdentifier("lewis",true);
 }

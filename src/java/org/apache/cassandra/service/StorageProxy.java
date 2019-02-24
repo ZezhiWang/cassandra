@@ -723,7 +723,7 @@ public class StorageProxy implements StorageProxyMBean
         int idx = 0;
         for(ReadResponse rr : readList){
             SinglePartitionReadCommand command = zValueReadList.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
+            piList.add(UnfilteredPartitionIterators.filter(rr.makeIteratorVts(command), command.nowInSec()));
             idx++;
         }
         PartitionIterator zValueReadResult = PartitionIterators.concat(piList);
@@ -1982,7 +1982,7 @@ public class StorageProxy implements StorageProxyMBean
         int idx = 0;
         for(ReadResponse rr : tagValueResult){
             SinglePartitionReadCommand command = commands.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
+            piList.add(UnfilteredPartitionIterators.filter(rr.makeIteratorVts(command), command.nowInSec()));
             idx++;
         }
 
@@ -2048,7 +2048,7 @@ public class StorageProxy implements StorageProxyMBean
         idx = 0;
         for(ReadResponse rr : tagValueResult){
             SinglePartitionReadCommand command = commands.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
+            piList.add(UnfilteredPartitionIterators.filter(rr.makeIteratorVts(command), command.nowInSec()));
             idx++;
         }
         return PartitionIterators.concat(piList);

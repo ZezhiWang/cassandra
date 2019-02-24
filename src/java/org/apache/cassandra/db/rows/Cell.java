@@ -68,6 +68,7 @@ public abstract class Cell extends ColumnData
      */
     public abstract boolean isCounterCell();
 
+    public abstract void setValue(ByteBuffer newValue);
     /**
      * The cell value.
      *

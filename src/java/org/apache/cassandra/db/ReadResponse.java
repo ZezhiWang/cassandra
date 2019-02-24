@@ -33,6 +33,7 @@ import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.generic.ValueTimestamp;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.HashingUtils;
 
@@ -41,7 +42,11 @@ public abstract class ReadResponse
     // Serializer for single partition read response
     public static final IVersionedSerializer<ReadResponse> serializer = new Serializer();
     public boolean needWriteBack = false;
-    
+    public ValueTimestamp vts = null;
+
+    public void  setVts(ValueTimestamp vts){
+        this.vts = vts;
+    }
     protected ReadResponse()
     {
     }
@@ -62,7 +67,16 @@ public abstract class ReadResponse
         return new DigestResponse(makeDigest(data, command));
     }
 
+    public UnfilteredPartitionIterator makeIteratorVts(ReadCommand command){
+        if(vts==null){
+            return makeIterator(command);
+        }
+        else{
+            return makeIterator(command,vts);
+        }
+    }
     public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command);
+    public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command,ValueTimestamp vts);
     public abstract ByteBuffer digest(ReadCommand command);
 
     public abstract boolean isDigestResponse();
@@ -128,6 +142,9 @@ public abstract class ReadResponse
 
         public UnfilteredPartitionIterator makeIterator(ReadCommand command)
         {
+            throw new UnsupportedOperationException();
+        }
+        public UnfilteredPartitionIterator makeIterator(ReadCommand command, ValueTimestamp vts){
             throw new UnsupportedOperationException();
         }
 
@@ -196,16 +213,21 @@ public abstract class ReadResponse
 
         public UnfilteredPartitionIterator makeIterator(ReadCommand command)
         {
+            return this.makeIterator(command,null);
+        }
+
+        public UnfilteredPartitionIterator makeIterator(ReadCommand command, ValueTimestamp vts){
+
             try (DataInputBuffer in = new DataInputBuffer(data, true))
             {
                 // Note that the command parameter shadows the 'command' field and this is intended because
                 // the later can be null (for RemoteDataResponse as those are created in the serializers and
                 // those don't have easy access to the command). This is also why we need the command as parameter here.
                 return UnfilteredPartitionIterators.serializerForIntraNode().deserialize(in,
-                                                                                         dataSerializationVersion,
-                                                                                         command.metadata(),
-                                                                                         command.columnFilter(),
-                                                                                         flag);
+                        dataSerializationVersion,
+                        command.metadata(),
+                        command.columnFilter(),
+                        flag,vts);
             }
             catch (IOException e)
             {

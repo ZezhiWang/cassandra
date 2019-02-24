@@ -19,6 +19,7 @@ package org.apache.cassandra.service.reads;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
+import java.nio.file.LinkOption;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
@@ -28,13 +29,15 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.schema.ColumnMetadata;
-import org.apache.cassandra.service.ABDConstants;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.generic.Config;
+import org.apache.cassandra.service.generic.LocalCache;
+import org.apache.cassandra.service.generic.ValueTimestamp;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
-import org.apache.cassandra.tracing.TraceState;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class DigestResolver extends ResponseResolver
@@ -93,14 +96,12 @@ public class DigestResolver extends ResponseResolver
         // extract the one with max z value
         int maxZ = -1;
         String writerId = "";
+        String primaryKey= "";
         ReadResponse maxZResponse = null;
 
-        ColumnIdentifier zIdentifier = new ColumnIdentifier("z_value", true);
-        ColumnIdentifier wIdentifier = new ColumnIdentifier("writer_id",true);
         for (MessageIn<ReadResponse> message : responses)
         {
             ReadResponse response = message.payload;
-
             // check if the response is indeed a data response
             // we shouldn't get a digest response here
             assert response.isDigestResponse() == false;
@@ -108,45 +109,81 @@ public class DigestResolver extends ResponseResolver
             // get the partition iterator corresponding to the
             // current data response
             PartitionIterator pi = UnfilteredPartitionIterators.filter(response.makeIterator(command), command.nowInSec());
-
-            // get the z value column
             while(pi.hasNext())
             {
-                // zValueReadResult.next() returns a RowIterator
                 RowIterator ri = pi.next();
+                TableMetadata tableMetadata = ri.metadata();
+                ColumnMetadata writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes("writer_id"));
+                ColumnMetadata zValueMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes("z_value"));
                 while(ri.hasNext())
                 {
-                    // todo: the entire row is read for the sake of development
-                    // future improvement could be made
-
-                    int currentZ = -1;
-                    String curWriter = "";
-                    for(Cell c : ri.next().cells())
-                    {
-                        if(c.column().name.equals(zIdentifier)) {
-                            currentZ = ByteBufferUtil.toInt(c.value());
-                        } else if (c.column().name.equals(wIdentifier) && Config.ID_ON){
-                            try{
-                                curWriter = ByteBufferUtil.string(c.value());
-                            } catch (CharacterCodingException e){
-                                logger.info("cannot cast to string");
-                            }
-                        }
-                    }
-
+                    Row r = ri.next();
+                    int currentZ = ByteBufferUtil.toInt(r.getCell(zValueMetaData).value());
                     if(currentZ > maxZ)
                     {
                         maxZ = currentZ;
                         maxZResponse = response;
                     } else if (currentZ == maxZ && Config.ID_ON){
+                        String curWriter = "";
+                        try{
+                            curWriter = ByteBufferUtil.string(r.getCell(writerIdMetaData).value());
+                        }
+                        catch (CharacterCodingException e){
+                            logger.error("cannot cast to string");
+                        }
                         maxZResponse = curWriter.compareTo(writerId)>0 ? response : maxZResponse;
                     }
                 }
+
             }
+        }
+        if(Config.LC_ON){
+            updateMaxResponseAndLC(maxZResponse,maxZ);
         }
         return maxZResponse;
     }
+    public void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
+        PartitionIterator pi = UnfilteredPartitionIterators
+                .filter(maxZResponse.makeIterator(command), command.nowInSec());
+        String primaryKey =" ";
+        int dataValue =0;
+        while (pi.hasNext()) {
+            RowIterator ri = pi.next();
+            while (ri.hasNext()) {
+                Row r = ri.next();
+                for (Cell c : r.cells()) {
+                    // todo: the entire row is read for the sake of developmen future improvement could be made
+                     if (c.column().isPrimaryKeyColumn()) {
+                        try {
+                            primaryKey = ByteBufferUtil.string(c.value());
+                        } catch (CharacterCodingException e) {
+                            logger.error("Could not parse the primary key");
+                        }
+                    }
+                    else if (c.column().name.equals(LocalCache.DATA_IDENTIFIER)) {
+                        try {
+                            dataValue = ByteBufferUtil.toInt(c.value());
+                        } catch (CharacterCodingException e) {
+                            logger.error("Could not parse the primary key");
+                        }
+                    }
 
+                }
+            }
+        }
+        ValueTimestamp valueTimestamp = LocalCache.getVTS(primaryKey);
+        if(valueTimestamp ==null || valueTimestamp.getTs()<maxZ){
+            ValueTimestamp newVTS = new ValueTimestamp(dataValue,maxZ);
+            LocalCache.setVTS(primaryKey,newVTS);
+        }
+        else{
+            maxZResponse.setVts(valueTimestamp);
+
+        }
+
+
+
+    }
     public boolean isDataPresent()
     {
         return dataResponse != null;

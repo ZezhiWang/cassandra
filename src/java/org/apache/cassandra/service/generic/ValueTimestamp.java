@@ -18,21 +18,28 @@
 
 package org.apache.cassandra.service.generic;
 
-public class VTS{
-    public final int v;
-    public final int ts;
-    public VTS(int v, int ts) {
+
+public class ValueTimestamp {
+    public final Integer v;
+    public final Integer ts;
+    public ValueTimestamp(int v, int ts) {
         this.v = v;
         this.ts = ts;
     }
 
     public int getV()
     {
-        return v;
+        synchronized (v){
+            return v;
+        }
     }
 
     public int getTs()
     {
-        return ts;
+        synchronized (ts) {
+            return ts;
+        }
     }
+
+
 }

@@ -20,6 +20,7 @@ package org.apache.cassandra.db.rows;
 import java.io.IOException;
 import java.io.IOError;
 
+import org.apache.cassandra.service.generic.ValueTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -204,7 +205,11 @@ public class UnfilteredRowIteratorSerializer
         return new Header(header, key, isReversed, false, partitionDeletion, staticRow, rowEstimate);
     }
 
-    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, SerializationHelper.Flag flag, Header header) throws IOException
+    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, SerializationHelper.Flag flag, Header header) throws IOException{
+        return this.deserialize(in,version,metadata,flag,header,null);
+    }
+
+    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, SerializationHelper.Flag flag, Header header, ValueTimestamp vts) throws IOException
     {
         if (header.isEmpty)
             return EmptyIterators.unfilteredRow(metadata, header.key, header.isReversed);
@@ -219,7 +224,7 @@ public class UnfilteredRowIteratorSerializer
             {
                 try
                 {
-                    Unfiltered unfiltered = UnfilteredSerializer.serializer.deserialize(in, sHeader, helper, builder);
+                    Unfiltered unfiltered = UnfilteredSerializer.serializer.deserialize(in, sHeader, helper, builder,vts);
                     return unfiltered == null ? endOfData() : unfiltered;
                 }
                 catch (IOException e)
@@ -228,6 +233,10 @@ public class UnfilteredRowIteratorSerializer
                 }
             }
         };
+    }
+    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, ColumnFilter selection, SerializationHelper.Flag flag,ValueTimestamp vts) throws IOException
+    {
+        return deserialize(in, version, metadata, flag, deserializeHeader(metadata, selection, in, version, flag),vts);
     }
 
     public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, ColumnFilter selection, SerializationHelper.Flag flag) throws IOException
