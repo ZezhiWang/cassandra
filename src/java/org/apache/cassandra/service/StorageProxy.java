@@ -713,14 +713,7 @@ public class StorageProxy implements StorageProxyMBean
 
         HashMap<String, ABDTag> maxZMap = new HashMap<>();
         List<ReadResponse> readList = fetchTagValue(zValueReadList, consistency_level, System.nanoTime());
-        List<PartitionIterator> piList = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : readList){
-            SinglePartitionReadCommand command = zValueReadList.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-        PartitionIterator zValueReadResult = PartitionIterators.concat(piList);
+        PartitionIterator zValueReadResult = prepIterator(zValueReadList, readList);
 
         while(zValueReadResult.hasNext())
         {
@@ -1970,15 +1963,7 @@ public class StorageProxy implements StorageProxyMBean
         // tag value pair with the largest tag
         
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        List<PartitionIterator> piList = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : tagValueResult){
-            SinglePartitionReadCommand command = commands.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-
-        PartitionIterator pi = PartitionIterators.concat(piList);
+        PartitionIterator pi = prepIterator(commands, tagValueResult);
         List<IMutation> mutationList = new ArrayList<>();
 
         // write the tag value pair with the largest tag to all servers
@@ -2022,14 +2007,7 @@ public class StorageProxy implements StorageProxyMBean
             mutateWithTag(mutationList, consistencyLevel, System.nanoTime());
         }
 
-        piList.clear();
-        idx = 0;
-        for(ReadResponse rr : tagValueResult){
-            SinglePartitionReadCommand command = commands.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-        return PartitionIterators.concat(piList);
+        return prepIterator(commands, tagValueResult);
     }
 
     private static List<ReadResponse> fetchTagValue(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
@@ -2079,6 +2057,17 @@ public class StorageProxy implements StorageProxyMBean
             results.add(reads[i].getResult());
         }
         return results;
+    }
+
+    private static PartitionIterator prepIterator(List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
+        List<PartitionIterator> partitionIterators = new ArrayList<>();
+        int idx = 0;
+        for(ReadResponse rr : responses){
+            SinglePartitionReadCommand command = commands.get(idx);
+            partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
+            idx++;
+        }
+        return PartitionIterators.concat(partitionIterators);
     }
 
     public static class LocalReadRunnable extends DroppableRunnable
