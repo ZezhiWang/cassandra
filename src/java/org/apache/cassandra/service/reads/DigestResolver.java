@@ -91,25 +91,26 @@ public class DigestResolver extends ResponseResolver
         return true;
     }
 
-    public ReadResponse extractMaxZResponse()
+    public ReadResponse getMaxResponse()
     {
         // check all data responses,
         // extract the one with max z value
+        int numDiff = 0;
         ABDTag maxTag = new ABDTag();
-        ReadResponse maxZResponse = null;
+        ReadResponse maxResponse = null;
 
         ColumnIdentifier zIdentifier = new ColumnIdentifier(ABDColomns.TAG, true);
         for (MessageIn<ReadResponse> message : responses)
         {
-            ReadResponse response = message.payload;
+            ReadResponse curResponse = message.payload;
 
             // check if the response is indeed a data response
             // we shouldn't get a digest response here
-            assert response.isDigestResponse() == false;
+            assert curResponse.isDigestResponse() == false;
 
             // get the partition iterator corresponding to the
             // current data response
-            PartitionIterator pi = UnfilteredPartitionIterators.filter(response.makeIterator(command), command.nowInSec());
+            PartitionIterator pi = UnfilteredPartitionIterators.filter(curResponse.makeIterator(command), command.nowInSec());
 
             // get the z value column
             while(pi.hasNext())
@@ -132,12 +133,17 @@ public class DigestResolver extends ResponseResolver
                     if(curTag.isLarger(maxTag))
                     {
                         maxTag = curTag;
-                        maxZResponse = response;
+                        maxResponse = curResponse;
                     }
+
+                    if(curTag.getTime() > maxTag.getTime())
+                        numDiff++;
                 }
             }
         }
-        return maxZResponse;
+        if(numDiff > 1)
+            maxResponse.needWriteBack = true;
+        return maxResponse;
     }
 
     public boolean isDataPresent()

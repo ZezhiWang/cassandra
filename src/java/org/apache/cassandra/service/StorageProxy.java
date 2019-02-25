@@ -1963,7 +1963,7 @@ public class StorageProxy implements StorageProxyMBean
         // tag value pair with the largest tag
         
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        PartitionIterator pi = prepIterator(commands, tagValueResult);
+        PartitionIterator pi = prepIterator(commands, tagValueResult,false);
         List<IMutation> mutationList = new ArrayList<>();
 
         // write the tag value pair with the largest tag to all servers
@@ -1975,18 +1975,18 @@ public class StorageProxy implements StorageProxyMBean
 
             RowIterator ri = pi.next();
 
-            ColumnMetadata zValueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.TAG));
-            ColumnMetadata valueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.VAL));
+            ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.TAG));
+            ColumnMetadata valMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.VAL));
 
-            assert zValueMetadata != null && valueMetadata != null;
+            assert tagMetaData != null && valMetadata != null;
 
             while(ri.hasNext())
             {
                 Row r = ri.next();
 
-                ABDTag z = ABDTag.deserialize(r.getCell(zValueMetadata).value());
+                ABDTag z = ABDTag.deserialize(r.getCell(tagMetaData).value());
 
-                int value = ByteBufferUtil.toInt(r.getCell(valueMetadata).value());
+                int value = ByteBufferUtil.toInt(r.getCell(valMetadata).value());
                 TableMetadata tableMetadata = ri.metadata();
 
                 Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(tableMetadata.keyspace, ri.partitionKey());
@@ -2028,10 +2028,10 @@ public class StorageProxy implements StorageProxyMBean
         }
 
         // todo: this is not needed
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].maybeTryAdditionalReplicas();
-        }
+//        for (int i=0; i<cmdCount; i++)
+//        {
+//            reads[i].maybeTryAdditionalReplicas();
+//        }
 
         for (int i=0; i<cmdCount; i++)
         {
@@ -2039,16 +2039,16 @@ public class StorageProxy implements StorageProxyMBean
         }
 
         // todo: this is not needed
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].maybeRepairAdditionalReplicas();
-        }
+//        for (int i=0; i<cmdCount; i++)
+//        {
+//            reads[i].maybeRepairAdditionalReplicas();
+//        }
 
         // todo: this is not needed
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].awaitReadRepair();
-        }
+//        for (int i=0; i<cmdCount; i++)
+//        {
+//            reads[i].awaitReadRepair();
+//        }
     
         List<ReadResponse> results = new ArrayList<>();
 
@@ -2060,11 +2060,16 @@ public class StorageProxy implements StorageProxyMBean
     }
 
     private static PartitionIterator prepIterator(List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
+        return prepIterator(commands, responses, true);
+    }
+
+    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, List<ReadResponse> responses, boolean flag) {
         List<PartitionIterator> partitionIterators = new ArrayList<>();
         int idx = 0;
         for(ReadResponse rr : responses){
             SinglePartitionReadCommand command = commands.get(idx);
-            partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
+            if(flag || rr.needWriteBack)
+                partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
             idx++;
         }
         return PartitionIterators.concat(partitionIterators);
