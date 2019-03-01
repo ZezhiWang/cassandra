@@ -419,7 +419,7 @@ public abstract class AbstractReadExecutor
             // when the key we're trying to fetch doesn't
             // even exist, use the default data result from
             // digestResolver, which will be empty in this case
-            setResult(digestResolver.getData());
+            setResult(digestResolver.getReadResponse());
         }
     }
 

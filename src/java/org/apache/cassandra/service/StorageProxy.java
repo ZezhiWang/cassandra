@@ -719,15 +719,8 @@ public class StorageProxy implements StorageProxyMBean
 
         HashMap<String, Integer> maxZMap = new HashMap<>();
         List<ReadResponse> readList = fetchTagValue(zValueReadList, consistency_level, System.nanoTime());
-        List<PartitionIterator> piList = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : readList){
-            SinglePartitionReadCommand command = zValueReadList.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIteratorVts(command), command.nowInSec()));
-            idx++;
-        }
-        PartitionIterator zValueReadResult = PartitionIterators.concat(piList);
 
+        PartitionIterator zValueReadResult = generatePartitionIterator(readList,zValueReadList);
         while(zValueReadResult.hasNext())
         {
             RowIterator ri = zValueReadResult.next();
@@ -771,7 +764,6 @@ public class StorageProxy implements StorageProxyMBean
             if(Config.ID_ON)
                 rsb.add("writer_id",FBUtilities.getBroadcastAddressAndPort().toString());
 
-
             Mutation zValueMutation = mutationBuilder.build();
 
             // merge the tag mutation and the original mutation
@@ -782,9 +774,6 @@ public class StorageProxy implements StorageProxyMBean
 
             newMutations.add(newMutation);
         }
-
-
-
 
         List<AbstractWriteResponseHandler<IMutation>> responseHandlers = new ArrayList<>(newMutations.size());
 
@@ -1958,6 +1947,65 @@ public class StorageProxy implements StorageProxyMBean
      * 5. else carry out read repair by getting data from all the nodes.
      */
     private static PartitionIterator fetchRows(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+            throws UnavailableException, ReadFailureException, ReadTimeoutException
+    {
+        // check if the target table has the z_value column,
+        // if it doesn't, it means this is not an ABD read operation,
+        // the original fetchRows will be used, this is a workaround
+        // to the initialization failure issue
+        SinglePartitionReadCommand incomingRead = commands.iterator().next();
+        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes("z_value"));
+        boolean isAbdRead = (tagMetadata != null);
+        if(isAbdRead)
+        {
+            return fetchRowsGeneric(commands, consistencyLevel, queryStartNanoTime);
+        }
+
+        int cmdCount = commands.size();
+
+        AbstractReadExecutor[] reads = new AbstractReadExecutor[cmdCount];
+
+        for (int i=0; i<cmdCount; i++)
+        {
+            reads[i] = AbstractReadExecutor.getReadExecutor(commands.get(i), consistencyLevel, queryStartNanoTime);
+        }
+
+        for (int i=0; i<cmdCount; i++)
+        {
+            reads[i].executeAsync();
+        }
+
+        for (int i=0; i<cmdCount; i++)
+        {
+            reads[i].maybeTryAdditionalReplicas();
+        }
+
+        for (int i=0; i<cmdCount; i++)
+        {
+            reads[i].awaitResponses();
+        }
+
+        for (int i=0; i<cmdCount; i++)
+        {
+            reads[i].maybeRepairAdditionalReplicas();
+        }
+
+        for (int i=0; i<cmdCount; i++)
+        {
+            reads[i].awaitReadRepair();
+        }
+
+        List<PartitionIterator> results = new ArrayList<>(cmdCount);
+        for (int i=0; i<cmdCount; i++)
+        {
+            SinglePartitionReadCommand command = commands.get(i);
+            results.add(UnfilteredPartitionIterators.filter(reads[i].getResult().makeIterator(command), command.nowInSec()));
+        }
+
+        return PartitionIterators.concat(results);
+    }
+
+    private static PartitionIterator fetchRowsGeneric(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
     throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
         // first we have to create a full partition read based on the
@@ -1978,15 +2026,8 @@ public class StorageProxy implements StorageProxyMBean
         // tag value pair with the largest tag
         
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        List<PartitionIterator> piList = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : tagValueResult){
-            SinglePartitionReadCommand command = commands.get(idx);
-            piList.add(UnfilteredPartitionIterators.filter(rr.makeIteratorVts(command), command.nowInSec()));
-            idx++;
-        }
+        PartitionIterator pi = generatePartitionIterator(tagValueResult,commands);
 
-        PartitionIterator pi = PartitionIterators.concat(piList);
         List<IMutation> mutationList = new ArrayList<>();
         if(Config.WB_ON){
             // write the tag value pair with the largest tag to all servers
@@ -2044,8 +2085,12 @@ public class StorageProxy implements StorageProxyMBean
             mutateWithTag(mutationList, consistencyLevel, System.nanoTime());
         }
 
-        piList.clear();
-        idx = 0;
+        return generatePartitionIterator(tagValueResult, commands);
+    }
+
+    private static PartitionIterator generatePartitionIterator(List<ReadResponse> tagValueResult, List<SinglePartitionReadCommand> commands) {
+        List<PartitionIterator> piList = new ArrayList<>();
+        int idx = 0;
         for(ReadResponse rr : tagValueResult){
             SinglePartitionReadCommand command = commands.get(idx);
             piList.add(UnfilteredPartitionIterators.filter(rr.makeIteratorVts(command), command.nowInSec()));

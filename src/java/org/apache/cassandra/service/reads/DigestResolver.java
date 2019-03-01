@@ -59,11 +59,16 @@ public class DigestResolver extends ResponseResolver
             dataResponse = message.payload;
     }
 
-    public ReadResponse getData()
+    public ReadResponse getReadResponse()
     {
         assert isDataPresent();
         return dataResponse;
-//        return UnfilteredPartitionIterators.filter(dataResponse.makeIterator(command), command.nowInSec());
+    }
+
+    public PartitionIterator getData()
+    {
+        assert isDataPresent();
+        return UnfilteredPartitionIterators.filter(dataResponse.makeIterator(command), command.nowInSec());
     }
 
     public boolean responsesMatch()
@@ -142,6 +147,7 @@ public class DigestResolver extends ResponseResolver
         }
         return maxZResponse;
     }
+
     public void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
         PartitionIterator pi = UnfilteredPartitionIterators
                 .filter(maxZResponse.makeIterator(command), command.nowInSec());
@@ -161,13 +167,8 @@ public class DigestResolver extends ResponseResolver
                         }
                     }
                     else if (c.column().name.equals(LocalCache.DATA_IDENTIFIER)) {
-                        try {
-                            dataValue = ByteBufferUtil.toInt(c.value());
-                        } catch (CharacterCodingException e) {
-                            logger.error("Could not parse the primary key");
-                        }
+                        dataValue = ByteBufferUtil.toInt(c.value());
                     }
-
                 }
             }
         }
