@@ -130,6 +130,7 @@ public class DigestResolver extends ResponseResolver
                         maxZResponse = response;
                     } else if (currentZ == maxZ && Config.ID_ON){
                         String curWriter = "";
+                        logger.info("Using writer id as the current z equals to maximum z");
                         try{
                             curWriter = ByteBufferUtil.string(r.getCell(writerIdMetaData).value());
                         }
@@ -174,10 +175,12 @@ public class DigestResolver extends ResponseResolver
         }
         ValueTimestamp valueTimestamp = LocalCache.getVTS(primaryKey);
         if(valueTimestamp ==null || valueTimestamp.getTs()<maxZ){
+            logger.info("Updating the local cache with the maximum z value response");
             ValueTimestamp newVTS = new ValueTimestamp(dataValue,maxZ);
             LocalCache.setVTS(primaryKey,newVTS);
         }
         else{
+            logger.info("Using the value in the local cache for the response");
             maxZResponse.setVts(valueTimestamp);
 
         }
