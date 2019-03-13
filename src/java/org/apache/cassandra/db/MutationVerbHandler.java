@@ -33,6 +33,8 @@ import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
 import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.service.ABDColomns;
+import org.apache.cassandra.service.ABDTag;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -64,7 +66,6 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         }
         else
         {
-
             replyTo = from;
         }
 
@@ -78,11 +79,9 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             message.payload.key()
             );
 
-            int z_value_local = -1;
-            String writer_id_local = "";
-
             // execute the read request locally to obtain the tag of the key
             // and extract tag information from the local read
+            ABDTag tagLocal = new ABDTag();
             try (ReadExecutionController executionController = localRead.executionController();
                  UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController))
             {
@@ -95,47 +94,34 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     {
                         Row r = ri.next();
 
-                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes("z_value"));
+                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.TAG));
                         Cell c = r.getCell(colMeta);
-                        z_value_local = ByteBufferUtil.toInt(c.value());
-
-                        colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes("writer_id"));
-
-                        c = r.getCell(colMeta);
-                        writer_id_local = ByteBufferUtil.string(c.value());
+                        tagLocal = ABDTag.deserialize(c.value());
                     }
                 }
             }
 
             // extract the tag information from the mutation
-            int z_value_request = 0;
-            String writer_id_request = "";
+            ABDTag tagRemote = new ABDTag();
             Row data = message.payload.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
             for (Cell c : data.cells())
             {
-                if(c.column().name.equals(new ColumnIdentifier("z_value", true)))
+                if(c.column().name.equals(new ColumnIdentifier(ABDColomns.TAG, true)))
                 {
-                    z_value_request = ByteBufferUtil.toInt(c.value());
-                }
-                else if(c.column().name.equals(new ColumnIdentifier("writer_id", true)))
-                {
-                    writer_id_request = ByteBufferUtil.string(c.value());
+                    tagRemote = ABDTag.deserialize(c.value());
                 }
             }
 
             //System.out.printf("local z:%d %s request z:%d %s\n", z_value_local, writer_id_local, z_value_request, writer_id_request);
 
             // comparing the tag and the one in mutation, act accordingly
-            if (z_value_request > z_value_local || (z_value_request == z_value_local && writer_id_request.compareTo(writer_id_local) > 0))
+            if (tagRemote.isLarger(tagLocal))
             {
-                message.payload.applyFuture().thenAccept(o -> reply(id, replyTo)).exceptionally(wto -> {
-                    failed();
-                    return null;
-                });
+                message.payload.applyFuture().thenAccept(o -> reply(id, replyTo));
             }
             else
             {
-                reply(id, replyTo);
+                failed();
             }
         }
         catch (WriteTimeoutException wto)
