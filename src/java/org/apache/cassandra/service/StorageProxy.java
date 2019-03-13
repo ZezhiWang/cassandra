@@ -719,7 +719,7 @@ public class StorageProxy implements StorageProxyMBean
         {
             RowIterator ri = zValueReadResult.next();
 
-            ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.TAG));
+            ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
 
             while(ri.hasNext())
             {
@@ -751,7 +751,7 @@ public class StorageProxy implements StorageProxyMBean
             mutationBuilder.update(tableMetadata)
                     .timestamp(timeStamp)
                     .row()
-                    .add(ABDColomns.TAG,ABDTag.serialize(nextTag));
+                    .add(ABDColumns.TAG,ABDTag.serialize(nextTag));
 
             Mutation zValueMutation = mutationBuilder.build();
 
@@ -1892,7 +1892,7 @@ public class StorageProxy implements StorageProxyMBean
         // the original fetchRows will be used, this is a workaround
         // to the initialization failure issue
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
-        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.TAG));
+        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
         boolean isAbdRead = (tagMetadata != null);
         if(isAbdRead)
         {
@@ -1975,8 +1975,8 @@ public class StorageProxy implements StorageProxyMBean
 
             RowIterator ri = pi.next();
 
-            ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.TAG));
-            ColumnMetadata valMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.VAL));
+            ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
+            ColumnMetadata valMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.VAL));
 
             assert tagMetaData != null && valMetadata != null;
 
@@ -1993,8 +1993,8 @@ public class StorageProxy implements StorageProxyMBean
 
                 mutationBuilder.update(tableMetadata)
                         .timestamp(FBUtilities.timestampMicros()).row()
-                        .add(ABDColomns.TAG, ABDTag.serialize(z))
-                        .add(ABDColomns.VAL, value);
+                        .add(ABDColumns.TAG, ABDTag.serialize(z))
+                        .add(ABDColumns.VAL, value);
 
                 Mutation tvMutation = mutationBuilder.build();
 

@@ -27,13 +27,11 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
-import org.apache.cassandra.db.rows.Unfiltered;
-import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
 import org.apache.cassandra.schema.ColumnMetadata;
-import org.apache.cassandra.service.ABDColomns;
+import org.apache.cassandra.service.ABDColumns;
 import org.apache.cassandra.service.ABDTag;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -94,7 +92,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     {
                         Row r = ri.next();
 
-                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColomns.TAG));
+                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
                         Cell c = r.getCell(colMeta);
                         tagLocal = ABDTag.deserialize(c.value());
                     }
@@ -106,7 +104,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             Row data = message.payload.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
             for (Cell c : data.cells())
             {
-                if(c.column().name.equals(new ColumnIdentifier(ABDColomns.TAG, true)))
+                if(c.column().name.equals(new ColumnIdentifier(ABDColumns.TAG, true)))
                 {
                     tagRemote = ABDTag.deserialize(c.value());
                 }

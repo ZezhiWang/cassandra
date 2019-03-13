@@ -29,7 +29,7 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
-import org.apache.cassandra.service.ABDColomns;
+import org.apache.cassandra.service.ABDColumns;
 import org.apache.cassandra.service.ABDTag;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
 
@@ -99,7 +99,7 @@ public class DigestResolver extends ResponseResolver
         ABDTag maxTag = new ABDTag();
         ReadResponse maxResponse = null;
 
-        ColumnIdentifier zIdentifier = new ColumnIdentifier(ABDColomns.TAG, true);
+        ColumnIdentifier zIdentifier = new ColumnIdentifier(ABDColumns.TAG, true);
         for (MessageIn<ReadResponse> message : responses)
         {
             ReadResponse curResponse = message.payload;
