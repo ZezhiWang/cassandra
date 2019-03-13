@@ -122,10 +122,7 @@ public class DigestResolver extends ResponseResolver
                 while(ri.hasNext())
                 {
                     Row r = ri.next();
-                    Cell c = r.getCell(zValueMetaData);
-                    if (c == null)
-                        continue;
-                    int currentZ = ByteBufferUtil.toInt(c.value());
+                    int currentZ = ByteBufferUtil.toInt(r.getCell(zValueMetaData).value());
                     if(currentZ > maxZ)
                     {
                         maxZ = currentZ;
