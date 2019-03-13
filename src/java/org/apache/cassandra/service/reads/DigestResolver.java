@@ -101,7 +101,6 @@ public class DigestResolver extends ResponseResolver
         // extract the one with max z value
         int maxZ = -1;
         String writerId = "";
-        String primaryKey= "";
         ReadResponse maxZResponse = null;
 
         for (MessageIn<ReadResponse> message : responses)
@@ -123,7 +122,10 @@ public class DigestResolver extends ResponseResolver
                 while(ri.hasNext())
                 {
                     Row r = ri.next();
-                    int currentZ = ByteBufferUtil.toInt(r.getCell(zValueMetaData).value());
+                    Cell c = r.getCell(zValueMetaData);
+                    if (c == null)
+                        continue;
+                    int currentZ = ByteBufferUtil.toInt(c.value());
                     if(currentZ > maxZ)
                     {
                         maxZ = currentZ;
