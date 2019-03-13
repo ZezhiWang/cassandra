@@ -33,6 +33,7 @@ import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
 import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.service.generic.Config;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -98,11 +99,11 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                         ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes("z_value"));
                         Cell c = r.getCell(colMeta);
                         z_value_local = ByteBufferUtil.toInt(c.value());
-
-                        colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes("writer_id"));
-
-                        c = r.getCell(colMeta);
-                        writer_id_local = ByteBufferUtil.string(c.value());
+                        if(Config.ID_ON){
+                            colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes("writer_id"));
+                            c = r.getCell(colMeta);
+                            writer_id_local = ByteBufferUtil.string(c.value());
+                        }
                     }
                 }
             }
@@ -117,7 +118,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                 {
                     z_value_request = ByteBufferUtil.toInt(c.value());
                 }
-                else if(c.column().name.equals(new ColumnIdentifier("writer_id", true)))
+                else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier("writer_id", true)))
                 {
                     writer_id_request = ByteBufferUtil.string(c.value());
                 }
@@ -126,7 +127,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             //System.out.printf("local z:%d %s request z:%d %s\n", z_value_local, writer_id_local, z_value_request, writer_id_request);
 
             // comparing the tag and the one in mutation, act accordingly
-            if (z_value_request > z_value_local || (z_value_request == z_value_local && writer_id_request.compareTo(writer_id_local) > 0))
+            if (z_value_request > z_value_local || (Config.ID_ON && z_value_request == z_value_local && writer_id_request.compareTo(writer_id_local) > 0))
             {
                 message.payload.applyFuture().thenAccept(o -> reply(id, replyTo)).exceptionally(wto -> {
                     failed();
