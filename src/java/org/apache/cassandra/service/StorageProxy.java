@@ -2113,7 +2113,7 @@ public class StorageProxy implements StorageProxyMBean
 
         for (int i=0; i<cmdCount; i++)
         {
-            reads[i].executeAsyncAbd();
+            reads[i].executeAsyncGeneric();
         }
 
         // todo: this is not needed
@@ -2124,7 +2124,7 @@ public class StorageProxy implements StorageProxyMBean
 
         for (int i=0; i<cmdCount; i++)
         {
-            reads[i].awaitResponses();
+            reads[i].awaitResponsesGeneric();
         }
 
         // todo: this is not needed

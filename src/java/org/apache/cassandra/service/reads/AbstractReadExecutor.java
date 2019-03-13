@@ -162,7 +162,7 @@ public abstract class AbstractReadExecutor
      */
     public abstract void executeAsync();
 
-    public void executeAsyncAbd()
+    public void executeAsyncGeneric()
     {
         // we don't need digest read for ABD,
         // all read requests issued are data requests
@@ -384,7 +384,21 @@ public abstract class AbstractReadExecutor
     /**
      * Wait for the CL to be satisfied by responses
      */
-    public void awaitResponses() throws ReadTimeoutException
+    public void awaitResponses() throws ReadTimeoutException {
+        try {
+            // the awaitResults function is exactly the same as the original
+            handler.awaitResults();
+        } catch (ReadTimeoutException e) {
+            try {
+                onReadTimeout();
+            } finally {
+                throw e;
+            }
+        }
+        setResult(digestResolver.getReadResponse());
+    }
+
+    public void awaitResponsesGeneric() throws ReadTimeoutException
     {
         try
         {
