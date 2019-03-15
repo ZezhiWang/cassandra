@@ -762,7 +762,7 @@ public class StorageProxy implements StorageProxyMBean
             rsb.add("z_value",zValue);
 
             if(Config.ID_ON)
-                rsb.add("writer_id",FBUtilities.getBroadcastAddressAndPort().toString());
+                rsb.add("writer_id",FBUtilities.getBroadcastAddressAndPort().toString(false));
 
             Mutation zValueMutation = mutationBuilder.build();
 
@@ -2050,8 +2050,16 @@ public class StorageProxy implements StorageProxyMBean
                 {
                     Row r = ri.next();
 
+                    logger.info(r.getCell(zValueMetadata).value().toString());
+
                     int z = ByteBufferUtil.toInt(r.getCell(zValueMetadata).value());
-                    int value = ByteBufferUtil.toInt(r.getCell(valueMetadata).value());
+                    String value = "";
+                    try{
+                        value = ByteBufferUtil.string(r.getCell(valueMetadata).value());
+                    }
+                    catch (CharacterCodingException e){
+                        logger.error("Unable to parse value string");
+                    }
                     TableMetadata tableMetadata = ri.metadata();
 
 

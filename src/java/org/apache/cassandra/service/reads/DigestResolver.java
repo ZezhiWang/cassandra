@@ -142,7 +142,7 @@ public class DigestResolver extends ResponseResolver
 
             }
         }
-        if(Config.LC_ON){
+        if(Config.LC_ON && maxZResponse!=null){
             updateMaxResponseAndLC(maxZResponse,maxZ);
         }
         return maxZResponse;
