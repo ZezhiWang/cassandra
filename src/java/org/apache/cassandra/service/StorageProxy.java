@@ -2041,7 +2041,7 @@ public class StorageProxy implements StorageProxyMBean
 
                 ColumnMetadata zValueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes("z_value"));
                 ColumnMetadata writerMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes("writer_id"));
-                ColumnMetadata valueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes("field0"));
+                ColumnMetadata valueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.VALUE_COLUMN_NAME));
 
 
                 assert zValueMetadata != null && valueMetadata != null;
@@ -2062,7 +2062,7 @@ public class StorageProxy implements StorageProxyMBean
                             .timestamp(FBUtilities.timestampMicros()).row();
 
                     rsb.add("z_value", z)
-                        .add("field0", value);
+                        .add(Config.VALUE_COLUMN_NAME, value);
 
                     if(Config.ID_ON) {
                         String writerId = "";

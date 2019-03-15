@@ -24,4 +24,5 @@ public class Config
     public static final boolean WB_ON = false;
     public static final boolean LC_ON = false;
 
+    public static final String VALUE_COLUMN_NAME  = "field0";
 }

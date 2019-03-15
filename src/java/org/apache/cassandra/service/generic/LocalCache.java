@@ -35,5 +35,5 @@ public class LocalCache
     public static void setVTS(String primaryKey, ValueTimestamp valueTimestamp){
        cache.put(primaryKey, valueTimestamp);
     }
-    public static final ColumnIdentifier DATA_IDENTIFIER = new ColumnIdentifier("lewis",true);
+    public static final ColumnIdentifier DATA_IDENTIFIER = new ColumnIdentifier(Config.VALUE_COLUMN_NAME,true);
 }
