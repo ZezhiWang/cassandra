@@ -762,15 +762,12 @@ public class StorageProxy implements StorageProxyMBean
             rsb.add(Config.ZVALUE,zValue);
 
             if(Config.ID_ON){
-                if (FBUtilities.getLocalAddressAndPort() == null)
-                    logger.info("no local addr");
                 String addr = FBUtilities.getLocalAddressAndPort().toString(false);
                 if (addr == null) {
                     rsb.add(Config.ID, "no addr string available");
                     logger.info("no addr string available");
                 } else {
                     rsb.add(Config.ID, addr);
-                    logger.info(addr);
                 }
             }
 
@@ -2046,8 +2043,8 @@ public class StorageProxy implements StorageProxyMBean
 
                 RowIterator ri = pi.next();
 
-                ColumnMetadata zValueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes("z_value"));
-                ColumnMetadata writerMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes("writer_id"));
+                ColumnMetadata zValueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
+                ColumnMetadata writerMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
                 ColumnMetadata valueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.VALUE_COLUMN_NAME));
 
 
@@ -2057,7 +2054,7 @@ public class StorageProxy implements StorageProxyMBean
                 {
                     Row r = ri.next();
 
-                    logger.info(r.getCell(zValueMetadata).value().toString());
+//                    logger.info(r.getCell(zValueMetadata).value().toString());
 
                     int z = ByteBufferUtil.toInt(r.getCell(zValueMetadata).value());
                     String value = "";
@@ -2076,7 +2073,7 @@ public class StorageProxy implements StorageProxyMBean
                             .update(tableMetadata)
                             .timestamp(FBUtilities.timestampMicros()).row();
 
-                    rsb.add("z_value", z)
+                    rsb.add(Config.ZVALUE, z)
                         .add(Config.VALUE_COLUMN_NAME, value);
 
                     if(Config.ID_ON) {
@@ -2086,7 +2083,7 @@ public class StorageProxy implements StorageProxyMBean
                         } catch (CharacterCodingException e) {
                             logger.info("unable to cast writer id");
                         }
-                        rsb.add("writer_id", writerId);
+                        rsb.add(Config.ID, writerId);
                     }
                     Mutation tvMutation = mutationBuilder.build();
 
