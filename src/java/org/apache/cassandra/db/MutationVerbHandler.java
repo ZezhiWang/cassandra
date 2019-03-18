@@ -18,6 +18,7 @@
 package org.apache.cassandra.db;
 
 import java.io.IOException;
+import java.nio.charset.CharacterCodingException;
 import java.util.Iterator;
 
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -27,8 +28,6 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
-import org.apache.cassandra.db.rows.Unfiltered;
-import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
@@ -37,9 +36,13 @@ import org.apache.cassandra.service.generic.Config;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MutationVerbHandler implements IVerbHandler<Mutation>
 {
+    private static final Logger logger = LoggerFactory.getLogger(MutationVerbHandler.class);
+
     private void reply(int id, InetAddressAndPort replyTo)
     {
         Tracing.trace("Enqueuing response to {}", replyTo);
@@ -96,11 +99,11 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     {
                         Row r = ri.next();
 
-                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes("z_value"));
+                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
                         Cell c = r.getCell(colMeta);
                         z_value_local = ByteBufferUtil.toInt(c.value());
                         if(Config.ID_ON){
-                            colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes("writer_id"));
+                            colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
                             c = r.getCell(colMeta);
                             writer_id_local = ByteBufferUtil.string(c.value());
                         }
@@ -120,7 +123,12 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                 }
                 else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
                 {
-                    writer_id_request = ByteBufferUtil.string(c.value());
+                    try{
+                        writer_id_request = ByteBufferUtil.string(c.value());
+                    } catch (CharacterCodingException e) {
+                        logger.info("cannot get writer_id");
+                    }
+
                 }
             }
 

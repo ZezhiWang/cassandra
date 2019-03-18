@@ -136,9 +136,10 @@ public class DigestResolver extends ResponseResolver
                         logger.info("Using writer id as the current z equals to maximum z");
                         try{
                             curWriter = ByteBufferUtil.string(r.getCell(writerIdMetaData).value());
-                        }
-                        catch (CharacterCodingException e){
+                        } catch (CharacterCodingException e){
                             logger.error("cannot cast to string");
+                        } catch (Exception e) {
+                            logger.error(e.toString());
                         }
                         maxZResponse = curWriter.compareTo(writerId)>0 ? response : maxZResponse;
                     }
@@ -146,7 +147,7 @@ public class DigestResolver extends ResponseResolver
 
             }
         }
-        if(Config.LC_ON && maxZResponse!=null){
+        if(Config.LC_ON && maxZResponse != null){
             updateMaxResponseAndLC(maxZResponse,maxZ);
         }
         return maxZResponse;

@@ -762,8 +762,11 @@ public class StorageProxy implements StorageProxyMBean
             rsb.add(Config.ZVALUE,zValue);
 
             if(Config.ID_ON){
-                logger.info(FBUtilities.getBroadcastAddressAndPort().toString());
-                rsb.add(Config.ID,FBUtilities.getBroadcastAddressAndPort().toString());
+                String addr = FBUtilities.getBroadcastAddressAndPort().toString(false);
+                if (addr == null)
+                    rsb.add(Config.ID,"no addr available");
+                else
+                    rsb.add(Config.ID,FBUtilities.getBroadcastAddressAndPort().toString(false));
             }
 
             Mutation zValueMutation = mutationBuilder.build();
