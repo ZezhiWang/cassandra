@@ -20,9 +20,9 @@ package org.apache.cassandra.service.generic;
 
 public class Config
 {
-    public static final boolean ID_ON = false;
-    public static final boolean WB_ON = false;
-    public static final boolean LC_ON = false;
+    public static final boolean ID_ON = true;
+    public static final boolean WB_ON = true;
+    public static final boolean LC_ON = true;
 
     public static final String VALUE_COLUMN_NAME  = "field0";
     public static final String ZVALUE  = "z_value";
