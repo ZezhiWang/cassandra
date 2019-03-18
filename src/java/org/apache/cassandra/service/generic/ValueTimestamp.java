@@ -20,14 +20,14 @@ package org.apache.cassandra.service.generic;
 
 
 public class ValueTimestamp {
-    public final Integer v;
+    public final String v;
     public final Integer ts;
-    public ValueTimestamp(int v, int ts) {
+    public ValueTimestamp(String v, int ts) {
         this.v = v;
         this.ts = ts;
     }
 
-    public int getV()
+    public String getV()
     {
         synchronized (v){
             return v;
@@ -40,6 +40,4 @@ public class ValueTimestamp {
             return ts;
         }
     }
-
-
 }

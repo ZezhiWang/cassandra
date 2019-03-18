@@ -725,7 +725,7 @@ public class StorageProxy implements StorageProxyMBean
         {
             RowIterator ri = zValueReadResult.next();
 
-            ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDConstants.Z_VALUE));
+            ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
 
             while(ri.hasNext())
             {
@@ -759,18 +759,17 @@ public class StorageProxy implements StorageProxyMBean
                     .timestamp(timeStamp)
                     .row();
 
-            rsb.add("z_value",zValue);
+            rsb.add(Config.ZVALUE,zValue);
 
-            if(Config.ID_ON)
-                rsb.add("writer_id",FBUtilities.getBroadcastAddressAndPort().toString(false));
+            if(Config.ID_ON){
+                logger.info(FBUtilities.getBroadcastAddressAndPort().toString());
+                rsb.add(Config.ID,FBUtilities.getBroadcastAddressAndPort().toString());
+            }
 
             Mutation zValueMutation = mutationBuilder.build();
 
             // merge the tag mutation and the original mutation
-            List<Mutation> mutationMergeList = new ArrayList<>();
-            mutationMergeList.add(zValueMutation);
-            mutationMergeList.add((Mutation)mutation);
-            Mutation newMutation = Mutation.merge(mutationMergeList);
+            Mutation newMutation = Mutation.merge(Arrays.asList(zValueMutation, (Mutation)mutation));
 
             newMutations.add(newMutation);
         }

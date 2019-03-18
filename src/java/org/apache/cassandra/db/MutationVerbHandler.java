@@ -114,11 +114,11 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             Row data = message.payload.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
             for (Cell c : data.cells())
             {
-                if(c.column().name.equals(new ColumnIdentifier("z_value", true)))
+                if(c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
                 {
                     z_value_request = ByteBufferUtil.toInt(c.value());
                 }
-                else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier("writer_id", true)))
+                else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
                 {
                     writer_id_request = ByteBufferUtil.string(c.value());
                 }
@@ -136,7 +136,8 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             }
             else
             {
-                reply(id, replyTo);
+//                reply(id, replyTo);
+                failed();
             }
         }
         catch (WriteTimeoutException wto)

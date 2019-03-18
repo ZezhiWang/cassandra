@@ -108,6 +108,10 @@ public class DigestResolver extends ResponseResolver
             ReadResponse response = message.payload;
             // check if the response is indeed a data response
             // we shouldn't get a digest response here
+            if (response == null){
+                logger.info("response is null");
+                continue;
+            }
             assert response.isDigestResponse() == false;
 
             // get the partition iterator corresponding to the
@@ -117,8 +121,8 @@ public class DigestResolver extends ResponseResolver
             {
                 RowIterator ri = pi.next();
                 TableMetadata tableMetadata = ri.metadata();
-                ColumnMetadata writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes("writer_id"));
-                ColumnMetadata zValueMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes("z_value"));
+                ColumnMetadata writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ID));
+                ColumnMetadata zValueMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
                 while(ri.hasNext())
                 {
                     Row r = ri.next();
@@ -151,8 +155,8 @@ public class DigestResolver extends ResponseResolver
     public void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
         PartitionIterator pi = UnfilteredPartitionIterators
                 .filter(maxZResponse.makeIterator(command), command.nowInSec());
-        String primaryKey =" ";
-        int dataValue =0;
+        String primaryKey = "";
+        String dataValue = "";
         while (pi.hasNext()) {
             RowIterator ri = pi.next();
             while (ri.hasNext()) {
@@ -167,7 +171,11 @@ public class DigestResolver extends ResponseResolver
                         }
                     }
                     else if (c.column().name.equals(LocalCache.DATA_IDENTIFIER)) {
-                        dataValue = ByteBufferUtil.toInt(c.value());
+                         try {
+                             dataValue = ByteBufferUtil.string(c.value());
+                         } catch (CharacterCodingException e) {
+                             logger.error("Could not parse the data");
+                         }
                     }
                 }
             }
