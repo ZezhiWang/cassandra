@@ -97,8 +97,6 @@ public class DigestResolver extends ResponseResolver
 
     public ReadResponse extractMaxZResponse()
     {
-        try {
-
             // check all data responses,
             // extract the one with max z value
             int maxZ = -1;
@@ -149,11 +147,6 @@ public class DigestResolver extends ResponseResolver
                 updateMaxResponseAndLC(maxZResponse, maxZ);
             }
             return maxZResponse;
-        }catch (Exception e){
-            logger.error("Here is the unidentified error in reading");
-            logger.error("{}",e);
-        }
-        return null;
     }
 
     public void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
