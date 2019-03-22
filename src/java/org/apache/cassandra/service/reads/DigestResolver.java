@@ -151,7 +151,7 @@ public class DigestResolver extends ResponseResolver
             return maxZResponse;
         }catch (Exception e){
             logger.error("Here is the unidentified error in reading");
-            logger.error(e);
+            logger.error("{}",e);
         }
         return null;
     }
