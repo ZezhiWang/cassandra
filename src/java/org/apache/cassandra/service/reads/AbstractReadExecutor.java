@@ -309,8 +309,9 @@ public abstract class AbstractReadExecutor
                 cfs.metric.speculativeRetries.inc();
                 // Could be waiting on the data, or on enough digests.
                 ReadCommand retryCommand = command;
-                if (handler.resolver.isDataPresent())
-                    retryCommand = command.copyAsDigestQuery();
+//                if (handler.resolver.isDataPresent()){
+//                    retryCommand = command.copyAsDigestQuery();
+//                }
 
                 InetAddressAndPort extraReplica = Iterables.getLast(targetReplicas);
                 if (traceState != null)
