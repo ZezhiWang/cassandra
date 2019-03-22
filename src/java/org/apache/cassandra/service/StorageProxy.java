@@ -2096,7 +2096,7 @@ public class StorageProxy implements StorageProxyMBean
             return generatePartitionIterator(tagValueResult, commands);
         }catch (Exception e){
             logger.error("Here is the unidentified error in writing");
-           logger.error(e);
+           logger.error("{}",e);
         }
         return null;
     }
