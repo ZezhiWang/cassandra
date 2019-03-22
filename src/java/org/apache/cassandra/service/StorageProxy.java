@@ -2010,94 +2010,95 @@ public class StorageProxy implements StorageProxyMBean
     }
 
     private static PartitionIterator fetchRowsGeneric(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
-    throws UnavailableException, ReadFailureException, ReadTimeoutException
-    {
-        // first we have to create a full partition read based on the
-        // incoming read command to cover both value and z_value column
-        List<SinglePartitionReadCommand> tagValueReadList = new ArrayList<>(commands.size());
-        for (SinglePartitionReadCommand readCommand: commands)
-        {
-            SinglePartitionReadCommand tagValueRead =
-            SinglePartitionReadCommand.fullPartitionRead(
-                readCommand.metadata(),
-                FBUtilities.nowInSeconds(),
-                readCommand.partitionKey()
-            );
-            tagValueReadList.add(tagValueRead);
-        }
+    throws UnavailableException, ReadFailureException, ReadTimeoutException {
+        try {
+            // first we have to create a full partition read based on the
+            // incoming read command to cover both value and z_value column
+            List<SinglePartitionReadCommand> tagValueReadList = new ArrayList<>(commands.size());
+            for (SinglePartitionReadCommand readCommand : commands) {
+                SinglePartitionReadCommand tagValueRead =
+                        SinglePartitionReadCommand.fullPartitionRead(
+                                readCommand.metadata(),
+                                FBUtilities.nowInSeconds(),
+                                readCommand.partitionKey()
+                        );
+                tagValueReadList.add(tagValueRead);
+            }
 
-        // execute the tag value read, the result will be the
-        // tag value pair with the largest tag
-        
-        List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        PartitionIterator pi = generatePartitionIterator(tagValueResult,commands);
+            // execute the tag value read, the result will be the
+            // tag value pair with the largest tag
 
-        List<IMutation> mutationList = new ArrayList<>();
-        if(Config.WB_ON){
-            // write the tag value pair with the largest tag to all servers
-            while(pi.hasNext())
-            {
-                // first we have to parse the value and tag from the result
-                // tagValueResult.next() returns a RowIterator
+            List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
+            PartitionIterator pi = generatePartitionIterator(tagValueResult, commands);
+
+            List<IMutation> mutationList = new ArrayList<>();
+            if (Config.WB_ON) {
+                // write the tag value pair with the largest tag to all servers
+                while (pi.hasNext()) {
+                    // first we have to parse the value and tag from the result
+                    // tagValueResult.next() returns a RowIterator
 
 
-                RowIterator ri = pi.next();
+                    RowIterator ri = pi.next();
 
-                ColumnMetadata zValueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
-                ColumnMetadata writerMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
-                ColumnMetadata valueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.VALUE_COLUMN_NAME));
+                    ColumnMetadata zValueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
+                    ColumnMetadata writerMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
+                    ColumnMetadata valueMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.VALUE_COLUMN_NAME));
 
 
-                assert zValueMetadata != null && valueMetadata != null;
+                    assert zValueMetadata != null && valueMetadata != null;
 
-                while(ri.hasNext())
-                {
-                    Row r = ri.next();
+                    while (ri.hasNext()) {
+                        Row r = ri.next();
 
 //                    logger.info(r.getCell(zValueMetadata).value().toString());
 
-                    int z = ByteBufferUtil.toInt(r.getCell(zValueMetadata).value());
-                    String value = "";
-                    try{
-                        value = ByteBufferUtil.string(r.getCell(valueMetadata).value());
-                    }
-                    catch (CharacterCodingException e){
-                        logger.error("Unable to parse value string");
-                    }
-                    TableMetadata tableMetadata = ri.metadata();
-
-
-                    Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(tableMetadata.keyspace, ri.partitionKey());
-
-                    Row.SimpleBuilder rsb = mutationBuilder
-                            .update(tableMetadata)
-                            .timestamp(FBUtilities.timestampMicros()).row();
-
-                    rsb.add(Config.ZVALUE, z)
-                        .add(Config.VALUE_COLUMN_NAME, value);
-
-                    if(Config.ID_ON) {
-                        String writerId = "";
+                        int z = ByteBufferUtil.toInt(r.getCell(zValueMetadata).value());
+                        String value = "";
                         try {
-                            writerId = ByteBufferUtil.string(r.getCell(writerMetadata).value());
+                            value = ByteBufferUtil.string(r.getCell(valueMetadata).value());
                         } catch (CharacterCodingException e) {
-                            logger.info("unable to cast writer id");
+                            logger.error("Unable to parse value string");
                         }
-                        rsb.add(Config.ID, writerId);
-                    }
-                    Mutation tvMutation = mutationBuilder.build();
+                        TableMetadata tableMetadata = ri.metadata();
 
-                    mutationList.add(tvMutation);
+
+                        Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(tableMetadata.keyspace, ri.partitionKey());
+
+                        Row.SimpleBuilder rsb = mutationBuilder
+                                .update(tableMetadata)
+                                .timestamp(FBUtilities.timestampMicros()).row();
+
+                        rsb.add(Config.ZVALUE, z)
+                                .add(Config.VALUE_COLUMN_NAME, value);
+
+                        if (Config.ID_ON) {
+                            String writerId = "";
+                            try {
+                                writerId = ByteBufferUtil.string(r.getCell(writerMetadata).value());
+                            } catch (CharacterCodingException e) {
+                                logger.info("unable to cast writer id");
+                            }
+                            rsb.add(Config.ID, writerId);
+                        }
+                        Mutation tvMutation = mutationBuilder.build();
+
+                        mutationList.add(tvMutation);
+                    }
                 }
+
+
+                // then we will have to perform the mutatation we've
+                // just generated
+                mutateWithTag(mutationList, consistencyLevel, System.nanoTime());
             }
 
-
-            // then we will have to perform the mutatation we've
-            // just generated
-            mutateWithTag(mutationList, consistencyLevel, System.nanoTime());
+            return generatePartitionIterator(tagValueResult, commands);
+        }catch (Exception e){
+            logger.error("Here is the unidentified error in writing");
+           logger.error(e);
         }
-
-        return generatePartitionIterator(tagValueResult, commands);
+        return null;
     }
 
     private static PartitionIterator generatePartitionIterator(List<ReadResponse> tagValueResult, List<SinglePartitionReadCommand> commands) {

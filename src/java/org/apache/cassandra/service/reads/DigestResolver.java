@@ -97,60 +97,63 @@ public class DigestResolver extends ResponseResolver
 
     public ReadResponse extractMaxZResponse()
     {
-        // check all data responses,
-        // extract the one with max z value
-        int maxZ = -1;
-        String writerId = "";
-        ReadResponse maxZResponse = null;
+        try {
 
-        for (MessageIn<ReadResponse> message : responses)
-        {
-            ReadResponse response = message.payload;
-            // check if the response is indeed a data response
-            // we shouldn't get a digest response here
-            if (response == null){
-                logger.info("response is null");
-                continue;
-            }
-            assert response.isDigestResponse() == false;
+            // check all data responses,
+            // extract the one with max z value
+            int maxZ = -1;
+            String writerId = "";
+            ReadResponse maxZResponse = null;
 
-            // get the partition iterator corresponding to the
-            // current data response
-            PartitionIterator pi = UnfilteredPartitionIterators.filter(response.makeIterator(command), command.nowInSec());
-            while(pi.hasNext())
-            {
-                RowIterator ri = pi.next();
-                TableMetadata tableMetadata = ri.metadata();
-                ColumnMetadata writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ID));
-                ColumnMetadata zValueMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
-                while(ri.hasNext())
-                {
-                    Row r = ri.next();
-                    int currentZ = ByteBufferUtil.toInt(r.getCell(zValueMetaData).value());
-                    if(currentZ > maxZ)
-                    {
-                        maxZ = currentZ;
-                        maxZResponse = response;
-                    } else if (currentZ == maxZ && Config.ID_ON){
-                        String curWriter = "";
-                        logger.info("Using writer id as the current z equals to maximum z");
-                        try{
-                            curWriter = ByteBufferUtil.string(r.getCell(writerIdMetaData).value());
-                        } catch (CharacterCodingException e){
-                            logger.error("cannot cast to string");
-                        } catch (Exception e) {
-                            logger.error(e.toString());
-                        }
-                        maxZResponse = curWriter.compareTo(writerId)>0 ? response : maxZResponse;
-                    }
+            for (MessageIn<ReadResponse> message : responses) {
+                ReadResponse response = message.payload;
+                // check if the response is indeed a data response
+                // we shouldn't get a digest response here
+                if (response == null) {
+                    logger.info("response is null");
+                    continue;
                 }
+                assert response.isDigestResponse() == false;
 
+                // get the partition iterator corresponding to the
+                // current data response
+                PartitionIterator pi = UnfilteredPartitionIterators.filter(response.makeIterator(command), command.nowInSec());
+                while (pi.hasNext()) {
+                    RowIterator ri = pi.next();
+                    TableMetadata tableMetadata = ri.metadata();
+                    ColumnMetadata writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ID));
+                    ColumnMetadata zValueMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
+                    while (ri.hasNext()) {
+                        Row r = ri.next();
+                        int currentZ = ByteBufferUtil.toInt(r.getCell(zValueMetaData).value());
+                        if (currentZ > maxZ) {
+                            maxZ = currentZ;
+                            maxZResponse = response;
+                        } else if (currentZ == maxZ && Config.ID_ON) {
+                            String curWriter = "";
+                            logger.info("Using writer id as the current z equals to maximum z");
+                            try {
+                                curWriter = ByteBufferUtil.string(r.getCell(writerIdMetaData).value());
+                            } catch (CharacterCodingException e) {
+                                logger.error("cannot cast to string");
+                            } catch (Exception e) {
+                                logger.error(e.toString());
+                            }
+                            maxZResponse = curWriter.compareTo(writerId) > 0 ? response : maxZResponse;
+                        }
+                    }
+
+                }
             }
+            if (Config.LC_ON && maxZResponse != null) {
+                updateMaxResponseAndLC(maxZResponse, maxZ);
+            }
+            return maxZResponse;
+        }catch (Exception e){
+            logger.error("Here is the unidentified error in reading");
+            logger.error(e);
         }
-        if(Config.LC_ON && maxZResponse != null){
-            updateMaxResponseAndLC(maxZResponse,maxZ);
-        }
-        return maxZResponse;
+        return null;
     }
 
     public void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
