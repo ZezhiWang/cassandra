@@ -144,8 +144,8 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             }
             else
             {
-//                reply(id, replyTo);
-                failed();
+                reply(id, replyTo);
+//                failed();
             }
         }
         catch (WriteTimeoutException wto)
