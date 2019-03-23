@@ -1963,6 +1963,8 @@ public class StorageProxy implements StorageProxyMBean
         // tag value pair with the largest tag
         
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
+        if (tagValueResult.size() == 0)
+            return prepIterator(commands, tagValueResult);
         PartitionIterator pi = prepIterator(commands, tagValueResult,false);
         List<IMutation> mutationList = new ArrayList<>();
 
