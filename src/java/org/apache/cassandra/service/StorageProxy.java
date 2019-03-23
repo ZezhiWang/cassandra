@@ -1965,7 +1965,7 @@ public class StorageProxy implements StorageProxyMBean
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
         if (tagValueResult.size() == 0)
             return prepIterator(commands, tagValueResult);
-        PartitionIterator pi = prepIterator(commands, tagValueResult,false);
+        PartitionIterator pi = prepIteratorNeedUpd(commands, tagValueResult);
         List<IMutation> mutationList = new ArrayList<>();
 
         // write the tag value pair with the largest tag to all servers
@@ -2061,17 +2061,24 @@ public class StorageProxy implements StorageProxyMBean
         return results;
     }
 
-    private static PartitionIterator prepIterator(List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
-        return prepIterator(commands, responses, true);
-    }
-
-    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, List<ReadResponse> responses, boolean flag) {
+    private static PartitionIterator prepIteratorNeedUpd(List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
         List<PartitionIterator> partitionIterators = new ArrayList<>();
         int idx = 0;
         for(ReadResponse rr : responses){
             SinglePartitionReadCommand command = commands.get(idx);
-            if(flag || rr.needWriteBack)
+            if(rr.needWriteBack)
                 partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
+            idx++;
+        }
+        return PartitionIterators.concat(partitionIterators);
+    }
+
+    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
+        List<PartitionIterator> partitionIterators = new ArrayList<>();
+        int idx = 0;
+        for(ReadResponse rr : responses){
+            SinglePartitionReadCommand command = commands.get(idx);
+            partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
             idx++;
         }
         return PartitionIterators.concat(partitionIterators);
