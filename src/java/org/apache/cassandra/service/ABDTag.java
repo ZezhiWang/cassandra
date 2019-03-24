@@ -22,7 +22,7 @@ public class ABDTag implements Serializable{
     private static final Logger logger = LoggerFactory.getLogger(StorageProxy.class);
 
     public ABDTag(){
-        this.logicalTIme = 0;
+        this.logicalTIme = -1;
         this.writerId = FBUtilities.getLocalAddressAndPort().toString(false);
         logger.info(this.toString());
     }

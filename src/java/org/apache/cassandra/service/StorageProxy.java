@@ -748,12 +748,12 @@ public class StorageProxy implements StorageProxyMBean
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
             long timeStamp = FBUtilities.timestampMicros();
             boolean containsKey = maxZMap.containsKey(mutation.key().toString());
-            ABDTag nextTag =  containsKey ? maxZMap.get(mutation.key().toString()).nextTag() : new ABDTag();
+            ABDTag curTag =  containsKey ? maxZMap.get(mutation.key().toString()) : new ABDTag();
 
             mutationBuilder.update(tableMetadata)
                     .timestamp(timeStamp)
                     .row()
-                    .add(ABDColumns.TAG,ABDTag.serialize(nextTag));
+                    .add(ABDColumns.TAG,ABDTag.serialize(curTag.nextTag()));
 
             Mutation zValueMutation = mutationBuilder.build();
 
