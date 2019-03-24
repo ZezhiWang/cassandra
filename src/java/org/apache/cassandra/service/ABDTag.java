@@ -23,7 +23,7 @@ public class ABDTag implements Serializable{
 
     public ABDTag(){
         this.logicalTIme = 0;
-        this.writerId = FBUtilities.getBroadcastAddressAndPort().toString();
+        this.writerId = FBUtilities.getLocalAddressAndPort().toString(false);
     }
 
     public ABDTag(String tagString){
