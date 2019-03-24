@@ -24,12 +24,14 @@ public class ABDTag implements Serializable{
     public ABDTag(){
         this.logicalTIme = 0;
         this.writerId = FBUtilities.getLocalAddressAndPort().toString(false);
+        logger.info(this.toString());
     }
 
     public ABDTag(String tagString){
         String[] tagArray = tagString.split(";");
         this.logicalTIme = Integer.parseInt(tagArray[0]);
         this.writerId = tagArray[1];
+        logger.info(this.toString());
     }
 
 
