@@ -36,9 +36,13 @@ import org.apache.cassandra.service.ABDTag;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MutationVerbHandler implements IVerbHandler<Mutation>
 {
+    private static final Logger logger = LoggerFactory.getLogger(MutationVerbHandler.class);
+
     private void reply(int id, InetAddressAndPort replyTo)
     {
         Tracing.trace("Enqueuing response to {}", replyTo);
@@ -91,9 +95,12 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     while(ri.hasNext())
                     {
                         Row r = ri.next();
-
+                        logger.info(r.toString());
                         ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
                         Cell c = r.getCell(colMeta);
+                        if (c == null) {
+                            logger.error("no tag cell");
+                        }
                         tagLocal = ABDTag.deserialize(c.value());
                     }
                 }
@@ -119,6 +126,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             }
             else
             {
+//                reply(id,replyTo);
                 failed();
             }
         }
