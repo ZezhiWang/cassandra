@@ -95,13 +95,14 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     while(ri.hasNext())
                     {
                         Row r = ri.next();
-                        logger.info(r.toString());
                         ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
                         Cell c = r.getCell(colMeta);
                         if (c == null) {
-                            logger.error("no tag cell");
+                            logger.error(r.toString());
+                            tagLocal = new ABDTag();
+                        }else {
+                            tagLocal = ABDTag.deserialize(c.value());
                         }
-                        tagLocal = ABDTag.deserialize(c.value());
                     }
                 }
             }
