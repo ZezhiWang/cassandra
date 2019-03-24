@@ -45,6 +45,7 @@ public class ABDTag implements Serializable{
 
     public ABDTag nextTag(){
         this.logicalTIme++;
+        logger.info(this.toString());
         return this;
     }
 

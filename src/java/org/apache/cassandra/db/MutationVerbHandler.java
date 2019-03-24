@@ -99,7 +99,6 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                         Cell c = r.getCell(colMeta);
                         if (c == null) {
                             logger.error(r.toString());
-                            tagLocal = new ABDTag();
                         }else {
                             tagLocal = ABDTag.deserialize(c.value());
                         }
@@ -110,11 +109,15 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             // extract the tag information from the mutation
             ABDTag tagRemote = new ABDTag();
             Row data = message.payload.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
+            ColumnIdentifier ci = new ColumnIdentifier(ABDColumns.TAG,true);
+
             for (Cell c : data.cells())
             {
-                if(c.column().name.equals(new ColumnIdentifier(ABDColumns.TAG, true)))
+
+                if(c.column().name.equals(ci))
                 {
                     tagRemote = ABDTag.deserialize(c.value());
+                    logger.info("recv remote {}", tagRemote.toString());
                 }
             }
 

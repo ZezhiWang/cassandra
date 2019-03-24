@@ -766,7 +766,7 @@ public class StorageProxy implements StorageProxyMBean
             newMutations.add(newMutation);
         }
 
-        mutateDoWrite(mutations, consistency_level, queryStartNanoTime, startTime);
+        mutateDoWrite(newMutations, consistency_level, queryStartNanoTime, startTime);
     }
 
     public static void mutateWithTag(Collection<? extends IMutation> mutations, ConsistencyLevel consistency_level, long queryStartNanoTime)
