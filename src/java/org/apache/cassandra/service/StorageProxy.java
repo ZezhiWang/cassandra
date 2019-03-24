@@ -726,8 +726,10 @@ public class StorageProxy implements StorageProxyMBean
                 // we don't need to extract the writer id here
                 // because it doesn't matter in mutate
                 Cell c = ri.next().getCell(colMeta);
-                ABDTag maxTag = ABDTag.deserialize(c.value());
-                maxZMap.put(ri.partitionKey().toString(), maxTag);
+                if (c != null) {
+                    ABDTag maxTag = ABDTag.deserialize(c.value());
+                    maxZMap.put(ri.partitionKey().toString(), maxTag);
+                }
             }
         }
 
@@ -1963,9 +1965,9 @@ public class StorageProxy implements StorageProxyMBean
         // tag value pair with the largest tag
         
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        if (tagValueResult.size() == 0)
-            return prepIterator(commands, tagValueResult);
         PartitionIterator pi = prepIteratorNeedUpd(commands, tagValueResult);
+        if (pi == null)
+            return prepIterator(commands, tagValueResult);
         List<IMutation> mutationList = new ArrayList<>();
 
         // write the tag value pair with the largest tag to all servers
@@ -2070,7 +2072,7 @@ public class StorageProxy implements StorageProxyMBean
                 partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
             idx++;
         }
-        return PartitionIterators.concat(partitionIterators);
+        return partitionIterators.size() > 0 ? PartitionIterators.concat(partitionIterators) : null;
     }
 
     private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
