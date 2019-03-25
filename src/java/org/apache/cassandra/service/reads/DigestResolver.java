@@ -111,7 +111,10 @@ public class DigestResolver extends ResponseResolver
                     logger.info("response is null");
                     continue;
                 }
-                assert response.isDigestResponse() == false;
+                if (response.isDigestResponse()) {
+                    logger.info("recv digest response");
+                    continue;
+                }
 
                 // get the partition iterator corresponding to the
                 // current data response
@@ -149,7 +152,7 @@ public class DigestResolver extends ResponseResolver
             return maxZResponse;
     }
 
-    public void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
+    private void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
         PartitionIterator pi = UnfilteredPartitionIterators
                 .filter(maxZResponse.makeIterator(command), command.nowInSec());
         String primaryKey = "";
