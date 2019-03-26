@@ -27,7 +27,7 @@ public class ABDTag implements Serializable{
         logger.info(this.toString());
     }
 
-    public ABDTag(String tagString){
+    private ABDTag(String tagString){
         String[] tagArray = tagString.split(";");
         this.logicalTIme = Integer.parseInt(tagArray[0]);
         this.writerId = tagArray[1];
@@ -85,10 +85,8 @@ public class ABDTag implements Serializable{
             tagString = ByteBufferUtil.string(buf);
         } catch (CharacterCodingException e){
             logger.warn("err casting tag {}",e);
-        }
-
-        if (tagString == "")
             return new ABDTag();
+        }
 
         return new ABDTag(tagString);
 //        byte[] bytes = new byte[buf.capacity()];
