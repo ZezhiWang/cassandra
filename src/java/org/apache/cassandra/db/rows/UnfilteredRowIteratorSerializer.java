@@ -19,6 +19,8 @@ package org.apache.cassandra.db.rows;
 
 import java.io.IOException;
 import java.io.IOError;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.cassandra.service.generic.ValueTimestamp;
 import org.slf4j.Logger;
@@ -209,6 +211,7 @@ public class UnfilteredRowIteratorSerializer
         return this.deserialize(in,version,metadata,flag,header,null);
     }
 
+
     public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, SerializationHelper.Flag flag, Header header, ValueTimestamp vts) throws IOException
     {
         if (header.isEmpty)
@@ -233,6 +236,45 @@ public class UnfilteredRowIteratorSerializer
                 }
             }
         };
+    }
+
+    public UnfilteredRowIterator deserializeCAS(DataInputPlus in, int version, TableMetadata metadata, SerializationHelper.Flag flag, Header header, Map<Integer,List<String>> result) throws IOException
+    {
+        if (header.isEmpty)
+            return EmptyIterators.unfilteredRow(metadata, header.key, header.isReversed);
+
+        final SerializationHelper helper = new SerializationHelper(metadata, version, flag);
+        final SerializationHeader sHeader = header.sHeader;
+        return new AbstractUnfilteredRowIterator(metadata, header.key, header.partitionDeletion, sHeader.columns(), header.staticRow, header.isReversed, sHeader.stats())
+        {
+            private final Row.Builder builder = BTreeRow.sortedBuilder();
+            private int rowId = 0;
+
+            protected Unfiltered computeNext()
+            {
+                try
+                {
+                    String update = null;
+                    if (result != null){
+                        List<String> stringList = result.get(rowId);
+                        update = stringList != null ? String.join("", stringList) : null;
+                    }
+
+                    Unfiltered unfiltered = UnfilteredSerializer.serializer.deserializeCAS(in, sHeader, helper, builder, update);
+                    rowId++;
+                    return unfiltered == null ? endOfData() : unfiltered;
+                }
+                catch (IOException e)
+                {
+                    throw new IOError(e);
+                }
+            }
+        };
+    }
+
+    public UnfilteredRowIterator deserializeCAS(DataInputPlus in, int version, TableMetadata metadata, ColumnFilter selection, SerializationHelper.Flag flag, Map<Integer,List<String>> result) throws IOException
+    {
+        return deserializeCAS(in, version, metadata, flag, deserializeHeader(metadata, selection, in, version, flag), result);
     }
     public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, ColumnFilter selection, SerializationHelper.Flag flag,ValueTimestamp vts) throws IOException
     {

@@ -19,6 +19,8 @@ package org.apache.cassandra.db;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
@@ -77,6 +79,7 @@ public abstract class ReadResponse
     }
     public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command);
     public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command,ValueTimestamp vts);
+    public abstract UnfilteredPartitionIterator makeIteratorCAS(ReadCommand command, Map<Integer, Map<Integer, List<String>>> result);
     public abstract ByteBuffer digest(ReadCommand command);
 
     public abstract boolean isDigestResponse();
@@ -145,6 +148,10 @@ public abstract class ReadResponse
             throw new UnsupportedOperationException();
         }
         public UnfilteredPartitionIterator makeIterator(ReadCommand command, ValueTimestamp vts){
+            throw new UnsupportedOperationException();
+        }
+        public UnfilteredPartitionIterator makeIteratorCAS(ReadCommand command, Map<Integer,Map<Integer,List<String>>> result)
+        {
             throw new UnsupportedOperationException();
         }
 
@@ -216,6 +223,21 @@ public abstract class ReadResponse
             return this.makeIterator(command,null);
         }
 
+        public UnfilteredPartitionIterator makeIteratorCAS(ReadCommand command,Map<Integer,Map<Integer, List<String>>> result) {
+            try (DataInputBuffer in = new DataInputBuffer(data, true)) {
+                // Note that the command parameter shadows the 'command' field and this is intended because
+                // the later can be null (for RemoteDataResponse as those are created in the serializers and
+                // those don't have easy access to the command). This is also why we need the command as parameter here.
+                return UnfilteredPartitionIterators.serializerForIntraNode().deserializeCAS(in,
+                        dataSerializationVersion,
+                        command.metadata(),
+                        command.columnFilter(),
+                        flag, result);
+            } catch (IOException e) {
+                // We're deserializing in memory so this shouldn't happen
+                throw new RuntimeException(e);
+            }
+        }
         public UnfilteredPartitionIterator makeIterator(ReadCommand command, ValueTimestamp vts){
 
             try (DataInputBuffer in = new DataInputBuffer(data, true))

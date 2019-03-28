@@ -320,6 +320,86 @@ public abstract class UnfilteredPartitionIterators
         public UnfilteredPartitionIterator deserialize(final DataInputPlus in, final int version, final TableMetadata metadata, final ColumnFilter selection, final SerializationHelper.Flag flag) throws IOException{
             return this.deserialize(in,version,metadata,selection,flag,null);
         }
+        public UnfilteredPartitionIterator deserializeCAS(final DataInputPlus in, final int version, final TableMetadata metadata, final ColumnFilter selection, final SerializationHelper.Flag flag, Map<Integer,Map<Integer,List<String>>> result) throws IOException
+        {
+            // Skip now unused isForThrift boolean
+            in.readBoolean();
+
+            return new AbstractUnfilteredPartitionIterator()
+            {
+                private UnfilteredRowIterator next;
+                private boolean hasNext;
+                private boolean nextReturned = true;
+                private int pId = 0;
+
+                public TableMetadata metadata()
+                {
+                    return metadata;
+                }
+
+                public boolean hasNext()
+                {
+                    if (!nextReturned)
+                        return hasNext;
+
+                    /*
+                     * We must consume the previous iterator before we start deserializing the next partition, so
+                     * that we start from the right position in the byte stream.
+                     *
+                     * It's possible however that it hasn't been fully consumed by upstream consumers - for example,
+                     * if a per partition limit caused merge iterator to stop early (see CASSANDRA-13911).
+                     *
+                     * In that case we must drain the unconsumed iterator fully ourselves, here.
+                     *
+                     * NOTE: transformations of the upstream BaseRows won't be applied for these consumed elements,
+                     * so, for exmaple, they won't be counted.
+                     */
+                    if (null != next)
+                        while (next.hasNext())
+                            next.next();
+
+                    try
+                    {
+                        hasNext = in.readBoolean();
+                        nextReturned = false;
+                        return hasNext;
+                    }
+                    catch (IOException e)
+                    {
+                        throw new IOError(e);
+                    }
+                }
+
+                public UnfilteredRowIterator next()
+                {
+                    if (nextReturned && !hasNext())
+                        throw new NoSuchElementException();
+
+                    try
+                    {
+                        nextReturned = true;
+                        Map<Integer,List<String>> ml = null;
+                        if(result != null)
+                            ml = result.get(pId);
+                        next = UnfilteredRowIteratorSerializer.serializer.deserializeCAS(in, version, metadata, selection, flag, ml);
+                        pId++;
+                        return next;
+                    }
+                    catch (IOException e)
+                    {
+                        throw new IOError(e);
+                    }
+                }
+
+                @Override
+                public void close()
+                {
+                    if (next != null)
+                        next.close();
+                }
+            };
+        }
+
         public UnfilteredPartitionIterator deserialize(final DataInputPlus in, final int version, final TableMetadata metadata, final ColumnFilter selection, final SerializationHelper.Flag flag, ValueTimestamp vts) throws IOException
         {
             // Skip now unused isForThrift boolean

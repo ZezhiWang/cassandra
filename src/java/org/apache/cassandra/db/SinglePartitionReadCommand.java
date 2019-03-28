@@ -182,6 +182,7 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
      */
     public static SinglePartitionReadCommand fullPartitionRead(TableMetadata metadata, int nowInSec, DecoratedKey key)
     {
+        logger.info("fullPartitionRead");
         return create(metadata, nowInSec, key, Slices.ALL);
     }
 

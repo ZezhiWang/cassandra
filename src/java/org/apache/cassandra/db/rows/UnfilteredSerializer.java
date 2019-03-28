@@ -436,6 +436,21 @@ public class UnfilteredSerializer
         return this.deserialize(in,header,helper,builder,null);
     }
 
+    public Unfiltered deserializeCAS(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder, String result)
+            throws IOException
+    {
+        while (true)
+        {
+            Unfiltered unfiltered = deserializeOneCAS(in, header, helper, builder, result);
+            if (unfiltered == null)
+                return null;
+
+            // Skip empty rows, see deserializeOne javadoc
+            if (!unfiltered.isEmpty())
+                return unfiltered;
+        }
+    }
+
     public Unfiltered deserialize(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder, ValueTimestamp vts) throws IOException{
         {
             while (true) {
@@ -496,6 +511,41 @@ public class UnfilteredSerializer
                         c.setValue(ByteBufferUtil.bytes(vts.getTs()));
                     }
 
+                }
+            }
+            return tmp;
+        }
+    }
+    private Unfiltered deserializeOneCAS(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder, String result)
+            throws IOException
+    {
+        // It wouldn't be wrong per-se to use an unsorted builder, but it would be inefficient so make sure we don't do it by mistake
+        assert builder.isSorted();
+
+        int flags = in.readUnsignedByte();
+        if (isEndOfPartition(flags))
+            return null;
+
+        int extendedFlags = readExtendedFlags(in, flags);
+
+        if (kind(flags) == Unfiltered.Kind.RANGE_TOMBSTONE_MARKER)
+        {
+            ClusteringBoundOrBoundary bound = ClusteringBoundOrBoundary.serializer.deserialize(in, helper.version, header.clusteringTypes());
+            return deserializeMarkerBody(in, header, bound);
+        }
+        else
+        {
+            // deserializeStaticRow should be used for that.
+            if (isStatic(extendedFlags))
+                throw new IOException("Corrupt flags value for unfiltered partition (isStatic flag set): " + flags);
+
+            builder.newRow(Clustering.serializer.deserialize(in, helper.version, header.clusteringTypes()));
+            Row tmp = deserializeRowBody(in, header, helper, flags, extendedFlags, builder);
+            if(result != null) {
+                ColumnIdentifier ci = new ColumnIdentifier("kishori", true);
+                for (Cell c : tmp.cells()) {
+                    if (c.column().name.equals(ci))
+                        c.setValue(ByteBufferUtil.bytes(result));
                 }
             }
             return tmp;

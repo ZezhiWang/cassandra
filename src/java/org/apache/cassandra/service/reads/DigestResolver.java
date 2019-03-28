@@ -20,6 +20,10 @@ package org.apache.cassandra.service.reads;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.file.LinkOption;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
@@ -73,25 +77,6 @@ public class DigestResolver extends ResponseResolver
 
     public boolean responsesMatch()
     {
-        long start = System.nanoTime();
-
-        // validate digests against each other; return false immediately on mismatch.
-        ByteBuffer digest = null;
-        for (MessageIn<ReadResponse> message : responses)
-        {
-            ReadResponse response = message.payload;
-
-            ByteBuffer newDigest = response.digest(command);
-            if (digest == null)
-                digest = newDigest;
-            else if (!digest.equals(newDigest))
-                // rely on the fact that only single partition queries use digests
-                return false;
-        }
-
-        if (logger.isTraceEnabled())
-            logger.trace("responsesMatch: {} ms.", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
-
         return true;
     }
 
@@ -102,7 +87,7 @@ public class DigestResolver extends ResponseResolver
             int maxZ = -1;
             String writerId = "";
             ReadResponse maxZResponse = null;
-
+            Map<Integer, Map<Integer, List<String>>> partitionRes = new HashMap<>();
             for (MessageIn<ReadResponse> message : responses) {
                 ReadResponse response = message.payload;
                 // check if the response is indeed a data response
@@ -119,13 +104,22 @@ public class DigestResolver extends ResponseResolver
                 // get the partition iterator corresponding to the
                 // current data response
                 PartitionIterator pi = UnfilteredPartitionIterators.filter(response.makeIterator(command), command.nowInSec());
+                int pId = 0;
                 while (pi.hasNext()) {
+                    Map<Integer,List<String>> rowRes = partitionRes.get(pId);
+                    if(rowRes == null)
+                        rowRes = new HashMap<>();
+                    int rowId = 0;
                     RowIterator ri = pi.next();
                     TableMetadata tableMetadata = ri.metadata();
                     ColumnMetadata writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ID));
                     ColumnMetadata zValueMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
+
                     while (ri.hasNext()) {
                         Row r = ri.next();
+                        List<String> dataRes = rowRes.get(rowId);
+                        if(dataRes == null)
+                            dataRes = new ArrayList<>();
                         int currentZ = ByteBufferUtil.toInt(r.getCell(zValueMetaData).value());
                         if (currentZ > maxZ) {
                             maxZ = currentZ;
@@ -137,13 +131,14 @@ public class DigestResolver extends ResponseResolver
                                 curWriter = ByteBufferUtil.string(r.getCell(writerIdMetaData).value());
                             } catch (CharacterCodingException e) {
                                 logger.error("cannot cast to string");
-                            } catch (Exception e) {
-                                logger.error(e.toString());
                             }
                             maxZResponse = curWriter.compareTo(writerId) > 0 ? response : maxZResponse;
                         }
+                        rowRes.put(rowId,dataRes);
+                        rowId++;
                     }
-
+                    partitionRes.put(pId,rowRes);
+                    pId++;
                 }
             }
             if (Config.LC_ON && maxZResponse != null) {
