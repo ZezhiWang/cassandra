@@ -1,4 +1,5 @@
 all:
+	ant clean
 	ant
 
 run:
@@ -7,4 +8,3 @@ run:
 clean:
 	rm -r data
 	rm -r logs
-	ant clean
