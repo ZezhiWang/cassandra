@@ -29,6 +29,10 @@ import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileDataInput;
+import org.apache.cassandra.service.TagVal;
+import org.apache.cassandra.service.TreasConsts;
+import org.apache.cassandra.service.TreasTag;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.SearchIterator;
 import org.apache.cassandra.utils.WrappedException;
 
@@ -428,12 +432,12 @@ public class UnfilteredSerializer
      * @return the deserialized {@link Unfiltered} or {@code null} if we've read the end of a partition. This method is
      * guaranteed to never return empty rows.
      */
-    public Unfiltered deserialize(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder)
+    public Unfiltered deserialize(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder, TagVal tv)
     throws IOException
     {
         while (true)
         {
-            Unfiltered unfiltered = deserializeOne(in, header, helper, builder);
+            Unfiltered unfiltered = deserializeOne(in, header, helper, builder, tv);
             if (unfiltered == null)
                 return null;
 
@@ -453,7 +457,7 @@ public class UnfilteredSerializer
      * But as {@link UnfilteredRowIterator} should not return empty
      * rows, this mean consumer of this method should make sure to skip said empty rows.
      */
-    private Unfiltered deserializeOne(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder)
+    private Unfiltered deserializeOne(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder, TagVal tv)
     throws IOException
     {
         // It wouldn't be wrong per-se to use an unsorted builder, but it would be inefficient so make sure we don't do it by mistake
@@ -477,7 +481,17 @@ public class UnfilteredSerializer
                 throw new IOException("Corrupt flags value for unfiltered partition (isStatic flag set): " + flags);
 
             builder.newRow(Clustering.serializer.deserialize(in, helper.version, header.clusteringTypes()));
-            return deserializeRowBody(in, header, helper, flags, extendedFlags, builder);
+            Row r = deserializeRowBody(in, header, helper, flags, extendedFlags, builder);
+            if(tv != null){
+                for(Cell c : r.cells()){
+                    if(c.column().name.equals(TreasConsts.tagIdentifier)){
+                        c.setValue(ByteBufferUtil.bytes(TreasTag.serialize(tv.tag)));
+                    } else if (c.column().name.equals(TreasConsts.valIdentifier)){
+                        c.setValue(ByteBufferUtil.bytes(tv.val));
+                    }
+                }
+            }
+            return r;
         }
     }
 

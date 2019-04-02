@@ -19,7 +19,9 @@ package org.apache.cassandra.service.reads;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -32,6 +34,7 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.service.Erasure;
 import org.apache.cassandra.service.TagVal;
 import org.apache.cassandra.service.TreasConsts;
 import org.apache.cassandra.service.TreasTag;
@@ -97,13 +100,13 @@ public class DigestResolver extends ResponseResolver
     }
 
 
-    public ReadResponse getMaxResponse()
+    public TagVal getMaxTagVal()
     {
         // check all data responses,
         // extract the one with max z value
 
         Map<TreasTag,Integer> tagCount = new HashMap<>();
-        Map<TagVal,Integer> valCount = new HashMap<>();
+        Map<TreasTag, List<String>> valCount = new HashMap<>();
 
         for (MessageIn<ReadResponse> message : responses)
         {
@@ -142,9 +145,9 @@ public class DigestResolver extends ResponseResolver
                             }
                             if (valOne.equals(""))
                                 continue;
-                            TagVal tvOne = new TagVal(tagOne, valOne);
-                            int count = valCount.containsKey(tvOne) ? valCount.get(tvOne) : 0;
-                            valCount.put(tvOne, count + 1);
+                            List<String> valList = valCount.containsKey(tagOne) ? valCount.get(tagOne) : new ArrayList<>();
+                            valList.add(valOne);
+                            valCount.put(tagOne, valList);
                         } else if (c.column().name.equals(TreasConsts.valTwoIdentifier)) {
                             try {
                                 valTwo = ByteBufferUtil.string(c.value());
@@ -153,9 +156,9 @@ public class DigestResolver extends ResponseResolver
                             }
                             if (valTwo.equals(""))
                                 continue;
-                            TagVal tvTwo = new TagVal(tagTwo, valTwo);
-                            int count = valCount.containsKey(tvTwo) ? valCount.get(tvTwo) : 0;
-                            valCount.put(tvTwo, count + 1);
+                            List<String> valList = valCount.containsKey(tagTwo) ? valCount.get(tagTwo) : new ArrayList<>();
+                            valList.add(valTwo);
+                            valCount.put(tagTwo, valList);
                         } else if (c.column().name.equals(TreasConsts.valThreeIdentifier)) {
                             try {
                                 valThree = ByteBufferUtil.string(c.value());
@@ -164,9 +167,9 @@ public class DigestResolver extends ResponseResolver
                             }
                             if (valThree.equals(""))
                                 continue;
-                            TagVal tvThree = new TagVal(tagThree, valThree);
-                            int count = valCount.containsKey(tvThree) ? valCount.get(tvThree) : 0;
-                            valCount.put(tvThree, count + 1);
+                            List<String> valList = valCount.containsKey(tagThree) ? valCount.get(tagThree) : new ArrayList<>();
+                            valList.add(valThree);
+                            valCount.put(tagThree, valList);
                         }
                     }
                 }
@@ -179,17 +182,18 @@ public class DigestResolver extends ResponseResolver
                 maxTagStar = t;
         }
 
-        TagVal maxTagVal = new TagVal(new TreasTag(),"");
-        for(TagVal tv : valCount.keySet()){
-            if (valCount.get(tv) >= TreasConsts.L && tv.tag.isLarger(maxTagVal.tag))
-                maxTagVal = tv;
+        TreasTag maxTagDec = new TreasTag();
+        for(TreasTag t : valCount.keySet()){
+            if (valCount.get(t).size() >= TreasConsts.L && t.isLarger(maxTagDec))
+                maxTagDec = t;
         }
 
 
+        String decoded = "";
+        if(!maxTagStar.isLarger(maxTagDec))
+            decoded = Erasure.decode(valCount.get(maxTagDec));
 
-        ReadResponse maxResponse = dataResponse;
-
-        return maxResponse;
+        return new TagVal(maxTagDec,decoded);
     }
 
     public TreasTag getMaxTag() {

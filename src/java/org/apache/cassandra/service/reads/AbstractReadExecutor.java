@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
+import org.apache.cassandra.service.TagVal;
 import org.apache.cassandra.service.TreasTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,7 +70,7 @@ public abstract class AbstractReadExecutor
     protected final ColumnFamilyStore cfs;
     protected final long queryStartNanoTime;
     protected volatile ReadResponse result = null;
-    protected volatile TreasTag maxTag = null;
+    protected volatile TagVal tagVal = null;
 
     AbstractReadExecutor(Keyspace keyspace, ColumnFamilyStore cfs, ReadCommand command, ConsistencyLevel consistency, List<InetAddressAndPort> targetReplicas, long queryStartNanoTime)
     {
@@ -380,10 +381,16 @@ public abstract class AbstractReadExecutor
         this.result = result;
     }
 
-    public void setMaxTag(TreasTag tag)
+    public void setTagVal(TagVal tv)
     {
-        Preconditions.checkState(this.maxTag == null, "Tag can only be set once");
-        this.maxTag = tag;
+        Preconditions.checkState(this.tagVal == null, "tagVal can only be set once");
+        this.tagVal = tv;
+    }
+
+    public void setTagVal(TreasTag t)
+    {
+        Preconditions.checkState(this.tagVal == null, "tagVal can only be set once");
+        this.tagVal = new TagVal(t,"");
     }
 
     /**
@@ -440,20 +447,8 @@ public abstract class AbstractReadExecutor
         // when we get here, the consistency level must have been satisfied
         // this function is implemented in digest resolver because the data
         // responses are in it
-        ReadResponse maxResponse = digestResolver.getMaxResponse();
-
-        if(maxResponse != null)
-        {
-            setResult(maxResponse);
-        }
-        else
-        {
-            // maxResponse is null, which is possible
-            // when the key we're trying to fetch doesn't
-            // even exist, use the default data result from
-            // digestResolver, which will be empty in this case
-            setResult(digestResolver.getReadResponse());
-        }
+        setTagVal(digestResolver.getMaxTagVal());
+        setResult(digestResolver.getReadResponse());
     }
 
     public void awaitTagTreas() throws ReadTimeoutException
@@ -471,9 +466,9 @@ public abstract class AbstractReadExecutor
         TreasTag tag = digestResolver.getMaxTag();
 
         if(tag != null){
-            setMaxTag(tag);
+            setTagVal(tag);
         } else {
-            setMaxTag(new TreasTag());
+            setTagVal(new TagVal());
         }
     }
 
@@ -508,9 +503,8 @@ public abstract class AbstractReadExecutor
         return result;
     }
 
-    public TreasTag getMaxTag() throws ReadFailureException, ReadTimeoutException
+    public TagVal getTagVal() throws ReadFailureException, ReadTimeoutException
     {
-        Preconditions.checkState(maxTag != null, "Tag must be set first");
-        return maxTag;
+        return tagVal != null ? tagVal : new TagVal();
     }
 }

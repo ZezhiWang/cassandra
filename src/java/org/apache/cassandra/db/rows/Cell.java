@@ -136,6 +136,8 @@ public abstract class Cell extends ColumnData
 
     public abstract Cell withUpdatedValue(ByteBuffer newValue);
 
+    public abstract void setValue(ByteBuffer newVal);
+
     public abstract Cell withUpdatedTimestampAndLocalDeletionTime(long newTimestamp, int newLocalDeletionTime);
 
     public abstract Cell copy(AbstractAllocator allocator);
