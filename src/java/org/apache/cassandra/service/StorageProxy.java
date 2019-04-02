@@ -46,7 +46,6 @@ import org.apache.cassandra.batchlog.Batch;
 import org.apache.cassandra.batchlog.BatchlogManager;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
-import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.service.reads.AbstractReadExecutor;
@@ -690,9 +689,7 @@ public class StorageProxy implements StorageProxyMBean
     {
         Tracing.trace("Determining replicas for mutation");
 
-        long startTime = System.nanoTime();
-
-        // ABD get
+        // Treas get
         // create an read command to fetch the z value corresponding to the key
         List<SinglePartitionReadCommand> tagReadList = new ArrayList<>();
         for (IMutation mutation : mutations)
@@ -712,27 +709,9 @@ public class StorageProxy implements StorageProxyMBean
             tagReadList.add(tagRead);
         }
 
-        HashMap<String, ABDTag> maxTsMap = new HashMap<>();
-        List<ReadResponse> readList = fetchTagValue(tagReadList, consistency_level, System.nanoTime());
-        PartitionIterator zValueReadResult = prepIterator(tagReadList, readList);
+        TreasTag maxTag = fetchMaxTag(tagReadList, consistency_level, System.nanoTime());
 
-        while(zValueReadResult.hasNext())
-        {
-            RowIterator ri = zValueReadResult.next();
-
-            ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
-
-            while(ri.hasNext())
-            {
-                Cell c = ri.next().getCell(colMeta);
-                if (c != null) {
-                    ABDTag maxTag = ABDTag.deserialize(c.value());
-                    maxTsMap.put(ri.partitionKey().toString(), maxTag);
-                }
-            }
-        }
-
-        // ABD put
+        // Treas put
         // for each incoming mutation,
         // create a mutation for modifying its z value
         // please note that we have 2 assumptions
@@ -746,19 +725,17 @@ public class StorageProxy implements StorageProxyMBean
 
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
             long timeStamp = FBUtilities.timestampMicros();
-            boolean containsKey = maxTsMap.containsKey(mutation.key().toString());
-            ABDTag curTag =  containsKey ? maxTsMap.get(mutation.key().toString()) : new ABDTag();
 
             mutationBuilder.update(tableMetadata)
                     .timestamp(timeStamp)
                     .row()
-                    .add(ABDColumns.TAG,ABDTag.serialize(curTag.nextTag()));
+                    .add(TreasConsts.TAG, TreasTag.serialize(maxTag.nextTag()));
 
-            Mutation zValueMutation = mutationBuilder.build();
+            Mutation tagMutation = mutationBuilder.build();
 
             // merge the tag mutation and the original mutation
             List<Mutation> mutationMergeList = new ArrayList<>();
-            mutationMergeList.add(zValueMutation);
+            mutationMergeList.add(tagMutation);
             mutationMergeList.add((Mutation)mutation);
             Mutation newMutation = Mutation.merge(mutationMergeList);
 
@@ -1881,9 +1858,9 @@ public class StorageProxy implements StorageProxyMBean
         // the original fetchRows will be used, this is a workaround
         // to the initialization failure issue
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
-        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
+        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.TAG));
         if(tagMetadata != null)
-            return fetchRowsAbd(commands, consistencyLevel);
+            return fetchRowsTreas(commands, consistencyLevel);
 
         int cmdCount = commands.size();
 
@@ -1929,7 +1906,7 @@ public class StorageProxy implements StorageProxyMBean
         return PartitionIterators.concat(results);
     }
 
-    private static PartitionIterator fetchRowsAbd(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel)
+    private static PartitionIterator fetchRowsTreas(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel)
             throws UnavailableException, ReadFailureException, ReadTimeoutException {
         // first we have to create a full partition read based on the
         // incoming read command to cover both value and z_value column
@@ -1948,10 +1925,8 @@ public class StorageProxy implements StorageProxyMBean
         // execute the tag value read, the result will be the
         // tag value pair with the largest tag
         
-        List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        PartitionIterator pi = prepIteratorNeedUpd(commands, tagValueResult);
-        if (pi == null)
-            return prepIterator(commands, tagValueResult);
+        ReadResponse tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
+        PartitionIterator pi = prepIterator(commands, tagValueResult);
 
         List<IMutation> mutationList = new ArrayList<>();
         // write the tag value pair with the largest tag to all servers
@@ -1960,8 +1935,8 @@ public class StorageProxy implements StorageProxyMBean
             // first we have to parse the value and tag from the result
             // tagValueResult.next() returns a RowIterator
             RowIterator ri = pi.next();
-            ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
-            ColumnMetadata valMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.VAL));
+            ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.TAG));
+            ColumnMetadata valMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.VAL));
 
             assert tagMetaData != null && valMetadata != null;
 
@@ -1969,7 +1944,7 @@ public class StorageProxy implements StorageProxyMBean
             {
                 Row r = ri.next();
 
-                ABDTag tag = ABDTag.deserialize(r.getCell(tagMetaData).value());
+                TreasTag tag = TreasTag.deserialize(r.getCell(tagMetaData).value());
 
                 String value = "";
                 try{
@@ -1984,8 +1959,8 @@ public class StorageProxy implements StorageProxyMBean
 
                 mutationBuilder.update(tableMetadata)
                         .timestamp(FBUtilities.timestampMicros()).row()
-                        .add(ABDColumns.TAG, ABDTag.serialize(tag))
-                        .add(ABDColumns.VAL, value);
+                        .add(TreasConsts.TAG, TreasTag.serialize(tag))
+                        .add(TreasConsts.VAL, value);
 
                 Mutation tvMutation = mutationBuilder.build();
 
@@ -2000,53 +1975,24 @@ public class StorageProxy implements StorageProxyMBean
         return prepIterator(commands, tagValueResult);
     }
 
-    private static List<ReadResponse> fetchTagValue(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static ReadResponse fetchTagValue(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
     throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
-        int cmdCount = commands.size();
+        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(commands.get(0), consistencyLevel, queryStartNanoTime);
+        read.executeAsyncTreas();
+        read.maybeTryAdditionalReplicas();
+        read.awaitResponsesTreas();
+        return read.getResult();
+    }
 
-        AbstractReadExecutor[] reads = new AbstractReadExecutor[cmdCount];
-
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i] = AbstractReadExecutor.getReadExecutor(commands.get(i), consistencyLevel, queryStartNanoTime);
-        }
-
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].executeAsyncAbd();
-        }
-
-        // todo: this is not needed
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].maybeTryAdditionalReplicas();
-        }
-
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].awaitResponsesAbd();
-        }
-
-        // todo: this is not needed
-//        for (int i=0; i<cmdCount; i++)
-//        {
-//            reads[i].maybeRepairAdditionalReplicas();
-//        }
-
-        // todo: this is not needed
-//        for (int i=0; i<cmdCount; i++)
-//        {
-//            reads[i].awaitReadRepair();
-//        }
-    
-        List<ReadResponse> results = new ArrayList<>();
-
-        for (int i=0; i<cmdCount; i++)
-        {
-            results.add(reads[i].getResult());
-        }
-        return results;
+    private static TreasTag fetchMaxTag(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+            throws UnavailableException, ReadFailureException, ReadTimeoutException
+    {
+        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(commands.get(0), consistencyLevel, queryStartNanoTime);
+        read.executeAsyncTreas();
+        read.maybeTryAdditionalReplicas();
+        read.awaitTagTreas();
+        return read.getMaxTag();
     }
 
     private static PartitionIterator prepIteratorNeedUpd(List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
@@ -2061,15 +2007,9 @@ public class StorageProxy implements StorageProxyMBean
         return partitionIterators.size() > 0 ? PartitionIterators.concat(partitionIterators) : null;
     }
 
-    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
-        List<PartitionIterator> partitionIterators = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : responses){
-            SinglePartitionReadCommand command = commands.get(idx);
-            partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-        return PartitionIterators.concat(partitionIterators);
+    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, ReadResponse response) {
+        SinglePartitionReadCommand command = commands.get(0);
+        return UnfilteredPartitionIterators.filter(response.makeIterator(command), command.nowInSec());
     }
 
     public static class LocalReadRunnable extends DroppableRunnable

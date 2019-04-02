@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
+import org.apache.cassandra.service.TreasTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,6 +69,7 @@ public abstract class AbstractReadExecutor
     protected final ColumnFamilyStore cfs;
     protected final long queryStartNanoTime;
     protected volatile ReadResponse result = null;
+    protected volatile TreasTag maxTag = null;
 
     AbstractReadExecutor(Keyspace keyspace, ColumnFamilyStore cfs, ReadCommand command, ConsistencyLevel consistency, List<InetAddressAndPort> targetReplicas, long queryStartNanoTime)
     {
@@ -159,7 +161,7 @@ public abstract class AbstractReadExecutor
      */
     public abstract void executeAsync();
 
-    public void executeAsyncAbd()
+    public void executeAsyncTreas()
     {
         // we don't need digest read for ABD,
         // all read requests issued are data requests
@@ -378,6 +380,12 @@ public abstract class AbstractReadExecutor
         this.result = result;
     }
 
+    public void setMaxTag(TreasTag tag)
+    {
+        Preconditions.checkState(this.maxTag == null, "Tag can only be set once");
+        this.maxTag = tag;
+    }
+
     /**
      * Wait for the CL to be satisfied by responses
      */
@@ -411,11 +419,10 @@ public abstract class AbstractReadExecutor
         }
     }
 
-    public void awaitResponsesAbd() throws ReadTimeoutException
+    public void awaitResponsesTreas() throws ReadTimeoutException
     {
         try
         {
-            // the awaitResults function is exactly the same as the original
             handler.awaitResults();
         }
         catch (ReadTimeoutException e)
@@ -435,7 +442,6 @@ public abstract class AbstractReadExecutor
         // responses are in it
         ReadResponse maxResponse = digestResolver.getMaxResponse();
 
-
         if(maxResponse != null)
         {
             setResult(maxResponse);
@@ -447,6 +453,27 @@ public abstract class AbstractReadExecutor
             // even exist, use the default data result from
             // digestResolver, which will be empty in this case
             setResult(digestResolver.getReadResponse());
+        }
+    }
+
+    public void awaitTagTreas() throws ReadTimeoutException
+    {
+        try {
+            handler.awaitResults();
+        } catch (ReadTimeoutException e){
+            try {
+                onReadTimeout();
+            } finally {
+                throw e;
+            }
+        }
+
+        TreasTag tag = digestResolver.getMaxTag();
+
+        if(tag != null){
+            setMaxTag(tag);
+        } else {
+            setMaxTag(new TreasTag());
         }
     }
 
@@ -479,5 +506,11 @@ public abstract class AbstractReadExecutor
     {
         Preconditions.checkState(result != null, "Result must be set first");
         return result;
+    }
+
+    public TreasTag getMaxTag() throws ReadFailureException, ReadTimeoutException
+    {
+        Preconditions.checkState(maxTag != null, "Tag must be set first");
+        return maxTag;
     }
 }

@@ -31,8 +31,8 @@ import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
 import org.apache.cassandra.schema.ColumnMetadata;
-import org.apache.cassandra.service.ABDColumns;
-import org.apache.cassandra.service.ABDTag;
+import org.apache.cassandra.service.TreasConsts;
+import org.apache.cassandra.service.TreasTag;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -83,7 +83,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
 
             // execute the read request locally to obtain the tag of the key
             // and extract tag information from the local read
-            ABDTag tagLocal = new ABDTag();
+            TreasTag tagLocal = new TreasTag();
             try (ReadExecutionController executionController = localRead.executionController();
                  UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController))
             {
@@ -95,28 +95,28 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     while(ri.hasNext())
                     {
                         Row r = ri.next();
-                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
+                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.TAG));
                         Cell c = r.getCell(colMeta);
                         if (c == null) {
                             logger.error(r.toString());
                         }else {
-                            tagLocal = ABDTag.deserialize(c.value());
+                            tagLocal = TreasTag.deserialize(c.value());
                         }
                     }
                 }
             }
 
             // extract the tag information from the mutation
-            ABDTag tagRemote = new ABDTag();
+            TreasTag tagRemote = new TreasTag();
             Row data = message.payload.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
-            ColumnIdentifier ci = new ColumnIdentifier(ABDColumns.TAG,true);
+            ColumnIdentifier ci = new ColumnIdentifier(TreasConsts.TAG,true);
 
             for (Cell c : data.cells())
             {
 
                 if(c.column().name.equals(ci))
                 {
-                    tagRemote = ABDTag.deserialize(c.value());
+                    tagRemote = TreasTag.deserialize(c.value());
                     logger.info("recv remote {}", tagRemote.toString());
                 }
             }

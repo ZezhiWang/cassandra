@@ -18,6 +18,9 @@
 package org.apache.cassandra.service.reads;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
@@ -29,9 +32,11 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
-import org.apache.cassandra.service.ABDColumns;
-import org.apache.cassandra.service.ABDTag;
+import org.apache.cassandra.service.TagVal;
+import org.apache.cassandra.service.TreasConsts;
+import org.apache.cassandra.service.TreasTag;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class DigestResolver extends ResponseResolver
 {
@@ -91,59 +96,130 @@ public class DigestResolver extends ResponseResolver
         return true;
     }
 
+
     public ReadResponse getMaxResponse()
     {
         // check all data responses,
         // extract the one with max z value
-        int numDiff = 0;
-        ABDTag maxTag = new ABDTag();
-        ReadResponse maxResponse = null;
 
-        ColumnIdentifier zIdentifier = new ColumnIdentifier(ABDColumns.TAG, true);
+        Map<TreasTag,Integer> tagCount = new HashMap<>();
+        Map<TagVal,Integer> valCount = new HashMap<>();
+
         for (MessageIn<ReadResponse> message : responses)
         {
             ReadResponse curResponse = message.payload;
-
-            // check if the response is indeed a data response
-            // we shouldn't get a digest response here
-            assert curResponse.isDigestResponse() == false;
-
-            // get the partition iterator corresponding to the
-            // current data response
+            assert !curResponse.isDigestResponse();
             PartitionIterator pi = UnfilteredPartitionIterators.filter(curResponse.makeIterator(command), command.nowInSec());
-
-            // get the z value column
             while(pi.hasNext())
             {
-                // zValueReadResult.next() returns a RowIterator
                 RowIterator ri = pi.next();
                 while(ri.hasNext())
                 {
-                    // todo: the entire row is read for the sake of development
-                    // future improvement could be made
-
-                    ABDTag curTag = new ABDTag();
-                    for(Cell c : ri.next().cells())
-                    {
-                        if(c.column().name.equals(zIdentifier)) {
-                            curTag = ABDTag.deserialize(c.value());
+                    TreasTag tagOne = null;
+                    TreasTag tagTwo = null;
+                    TreasTag tagThree = null;
+                    String valOne = "";
+                    String valTwo = "";
+                    String valThree = "";
+                    for(Cell c : ri.next().cells()) {
+                        if (c.column().name.equals(TreasConsts.tagOneIdentifier)) {
+                            tagOne = TreasTag.deserialize(c.value());
+                            int count = tagCount.containsKey(tagOne) ? tagCount.get(tagOne) : 0;
+                            tagCount.put(tagOne, count + 1);
+                        } else if (c.column().name.equals(TreasConsts.tagTwoIdentifier)) {
+                            tagTwo = TreasTag.deserialize(c.value());
+                            int count = tagCount.containsKey(tagTwo) ? tagCount.get(tagTwo) : 0;
+                            tagCount.put(tagTwo, count + 1);
+                        } else if (c.column().name.equals(TreasConsts.tagThreeIdentifier)) {
+                            tagThree = TreasTag.deserialize(c.value());
+                            int count = tagCount.containsKey(tagThree) ? tagCount.get(tagThree) : 0;
+                            tagCount.put(tagThree, count + 1);
+                        } else if (c.column().name.equals(TreasConsts.valOneIdentifier)) {
+                            try {
+                                valOne = ByteBufferUtil.string(c.value());
+                            } catch (CharacterCodingException e) {
+                                logger.info("Unable to cast valOne");
+                            }
+                            if (valOne.equals(""))
+                                continue;
+                            TagVal tvOne = new TagVal(tagOne, valOne);
+                            int count = valCount.containsKey(tvOne) ? valCount.get(tvOne) : 0;
+                            valCount.put(tvOne, count + 1);
+                        } else if (c.column().name.equals(TreasConsts.valTwoIdentifier)) {
+                            try {
+                                valTwo = ByteBufferUtil.string(c.value());
+                            } catch (CharacterCodingException e) {
+                                logger.info("Unable to cast valOne");
+                            }
+                            if (valTwo.equals(""))
+                                continue;
+                            TagVal tvTwo = new TagVal(tagTwo, valTwo);
+                            int count = valCount.containsKey(tvTwo) ? valCount.get(tvTwo) : 0;
+                            valCount.put(tvTwo, count + 1);
+                        } else if (c.column().name.equals(TreasConsts.valThreeIdentifier)) {
+                            try {
+                                valThree = ByteBufferUtil.string(c.value());
+                            } catch (CharacterCodingException e) {
+                                logger.info("Unable to cast valOne");
+                            }
+                            if (valThree.equals(""))
+                                continue;
+                            TagVal tvThree = new TagVal(tagThree, valThree);
+                            int count = valCount.containsKey(tvThree) ? valCount.get(tvThree) : 0;
+                            valCount.put(tvThree, count + 1);
                         }
                     }
-
-                    if(curTag.isLarger(maxTag))
-                    {
-                        maxTag = curTag;
-                        maxResponse = curResponse;
-                    }
-
-                    if(curTag.getTime() > maxTag.getTime())
-                        numDiff++;
                 }
             }
         }
-        if(numDiff > 1)
-            maxResponse.needWriteBack = true;
+
+        TreasTag maxTagStar = new TreasTag();
+        for(TreasTag t : tagCount.keySet()){
+            if (tagCount.get(t) >= TreasConsts.K && t.isLarger(maxTagStar))
+                maxTagStar = t;
+        }
+
+        TagVal maxTagVal = new TagVal(new TreasTag(),"");
+        for(TagVal tv : valCount.keySet()){
+            if (valCount.get(tv) >= TreasConsts.L && tv.tag.isLarger(maxTagVal.tag))
+                maxTagVal = tv;
+        }
+
+
+
+        ReadResponse maxResponse = dataResponse;
+
         return maxResponse;
+    }
+
+    public TreasTag getMaxTag() {
+        TreasTag maxTag = new TreasTag();
+
+        ColumnIdentifier tagOneIdentifier = new ColumnIdentifier(TreasConsts.TAG_ONE, true);
+        ColumnIdentifier tagTwoIdentifier = new ColumnIdentifier(TreasConsts.TAG_TWO, true);
+        ColumnIdentifier tagThreeIdentifier = new ColumnIdentifier(TreasConsts.TAG_THREE, true);
+
+        for (MessageIn<ReadResponse> message : responses) {
+            ReadResponse curResponse = message.payload;
+            assert !curResponse.isDigestResponse();
+            PartitionIterator pi = UnfilteredPartitionIterators.filter(curResponse.makeIterator(command), command.nowInSec());
+            while (pi.hasNext()) {
+                RowIterator ri = pi.next();
+                while (ri.hasNext()) {
+                    TreasTag curTag = new TreasTag();
+                    for (Cell c : ri.next().cells()) {
+                        if (c.column().name.equals(tagOneIdentifier) || c.column().name.equals(tagTwoIdentifier) || c.column().name.equals(tagThreeIdentifier)) {
+                            TreasTag tmpTag = TreasTag.deserialize(c.value());
+                            curTag = tmpTag.isLarger(curTag) ? tmpTag : curTag;
+                        }
+                    }
+                    if (curTag.isLarger(maxTag)) {
+                        maxTag = curTag;
+                    }
+                }
+            }
+        }
+        return maxTag;
     }
 
     public boolean isDataPresent()
