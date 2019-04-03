@@ -46,8 +46,10 @@ import org.apache.cassandra.batchlog.Batch;
 import org.apache.cassandra.batchlog.BatchlogManager;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
+import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.service.reads.AbstractReadExecutor;
 import org.apache.cassandra.service.reads.DataResolver;
 import org.apache.cassandra.service.reads.ReadCallback;
@@ -721,7 +723,7 @@ public class StorageProxy implements StorageProxyMBean
             mutationBuilder.update(tableMetadata)
                     .timestamp(timeStamp)
                     .row()
-                    .add(TreasConsts.TAG, TreasTag.serialize(maxTag.nextTag()));
+                    .add(TreasConsts.TAG, TreasTag.serializeHelper(maxTag.nextTag()));
 
             Mutation tagMutation = mutationBuilder.build();
 
@@ -1391,6 +1393,7 @@ public class StorageProxy implements StorageProxyMBean
                     // (1.1 knows how to forward old-style String message IDs; updated to int in 2.0)
                     if (localDataCenter.equals(dc))
                     {
+                        logger.info("Running from local datacenter");
                         if (localDc == null)
                             localDc = new ArrayList<>(targetsSize);
 
@@ -1430,28 +1433,125 @@ public class StorageProxy implements StorageProxyMBean
             }
         }
 
-        if (backPressureHosts != null)
-            MessagingService.instance().applyBackPressure(backPressureHosts, responseHandler.currentTimeout());
+        List<PartitionUpdate> partitionUpdates = mutation.getPartitionUpdates().asList();
+        List<String> dataSplits = null;
+        for (PartitionUpdate partitionUpdate : partitionUpdates)
+        {
+            Iterator<Row> rowIterator = partitionUpdate.iterator();
+            Map<Integer, Map<Integer, List<String>>> partitionChages = new HashMap<>();
+            while (rowIterator.hasNext())
+            {
+                Row row = rowIterator.next();
+                int cellId = 0;
+                for (Cell c : row.cells())
+                {
+                    logger.info(c.column().name.toString());
+
+                    if (c.column().name.equals(TreasConsts.ORIGINAL_VAL_IDENTIFIER))
+                    {
+                        logger.info("In data cell");
+                        try
+                        {
+                            String data = ByteBufferUtil.string(c.value());
+                            dataSplits = splitData(data);
+                        }
+                        catch (CharacterCodingException e)
+                        {
+                            logger.error("Unable to parse string from bytes");
+                        }
+                    }
+                }
+            }
+        }
+        int nReplications = 2;
+        List<MessageOut<Mutation>> replications = createDataPartitionMessages(dataSplits, mutation, nReplications);
+        Mutation localMutation = replications.get(0).payload;
+
+
+        MessagingService.instance().applyBackPressure(backPressureHosts, responseHandler.currentTimeout());
 
         if (endpointsToHint != null)
             submitHint(mutation, endpointsToHint, responseHandler);
 
-        if (insertLocal)
+        if (insertLocal){
             performLocally(stage, Optional.of(mutation), mutation::apply, responseHandler);
+            logger.info("Performing local changes");
+            performLocally(stage, Optional.of(localMutation), localMutation::apply, responseHandler);
+        }
 
         if (localDc != null)
         {
-            for (InetAddressAndPort destination : localDc)
+            int i = 1;
+            for (InetAddressAndPort destination : localDc){
                 MessagingService.instance().sendRR(message, destination, responseHandler, true);
+                logger.info("Sending to a foreign server");
+                MessagingService.instance().sendRR(replications.get(i++), destination, responseHandler, true);
+            }
         }
+
         if (dcGroups != null)
         {
+            logger.warn("Sending data to non-dc group, this is not implemented for the CAS app yet");
             // for each datacenter, send the message to one node to relay the write to other replicas
             for (Collection<InetAddressAndPort> dcTargets : dcGroups.values())
                 sendMessagesToNonlocalDC(message, dcTargets, responseHandler);
         }
     }
+    private static List<String> splitData(String data){
+        List<String> dataSplits = new ArrayList<>();
+        dataSplits.add(data.substring(0,2));
+        dataSplits.add(data.substring(2,4));
+        return dataSplits;
 
+    }
+
+    private static List<MessageOut<Mutation>> createDataPartitionMessages(List<String> dataSplits,
+                                                                          Mutation mutation, int nReplications)
+    {
+
+        List<MessageOut<Mutation>> dataPartitionMessages = new ArrayList<>();
+        for (int r = 0; r < nReplications; r++)
+        {
+            MessageOut<Mutation> dataPartitionMessage = replicateMessage(mutation);
+            List<PartitionUpdate> partitionUpdates = dataPartitionMessage.payload.getPartitionUpdates().asList();
+            for (PartitionUpdate partitionUpdate : partitionUpdates)
+            {
+                Iterator<Row> rowIterator = partitionUpdate.iterator();
+                while (rowIterator.hasNext())
+                {
+                    Row row = rowIterator.next();
+                    for (Cell c : row.cells())
+
+                    {
+                        if (c.column().name.equals(TreasConsts.ORIGINAL_VAL_IDENTIFIER))
+                        {
+
+                            String newValue = dataSplits.get(r);
+                            c.setValue(ByteBufferUtil.bytes(newValue));
+                        }
+                    }
+                }
+            }
+            dataPartitionMessages.add(dataPartitionMessage);
+        }
+        return dataPartitionMessages;
+    }
+
+    private static MessageOut<Mutation> replicateMessage(Mutation mutation){
+
+        PartitionUpdate update = mutation.getPartitionUpdates().iterator().next();
+        long timeStamp = FBUtilities.timestampMicros();
+        ImmutableMap.Builder<TableId, PartitionUpdate> modifications = new ImmutableMap.Builder<>();
+        for (PartitionUpdate partitionUpdate : mutation.getPartitionUpdates()){
+            int version = 1;
+            ByteBuffer byteBuffer = PartitionUpdate.toBytes(partitionUpdate, 1);
+            PartitionUpdate newPartitionUpdate = PartitionUpdate.fromBytes(byteBuffer, version);
+            modifications.put(newPartitionUpdate.metadata().id, newPartitionUpdate);
+        }
+
+        Mutation newMutation = new Mutation(update.metadata().keyspace, update.partitionKey(), modifications.build(), timeStamp);
+        return newMutation.createMessage();
+    }
     private static void checkHintOverload(InetAddressAndPort destination)
     {
         // avoid OOMing due to excess hints.  we need to do this check even for "live" nodes, since we can
@@ -1914,6 +2014,7 @@ public class StorageProxy implements StorageProxyMBean
                 FBUtilities.nowInSeconds(),
                 commands.get(0).partitionKey()
             );
+
         ResponseAndTagVal tagValueResult = fetchTagValue(command, consistencyLevel, System.nanoTime());
         Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(command.metadata().keyspace, command.partitionKey());
 
