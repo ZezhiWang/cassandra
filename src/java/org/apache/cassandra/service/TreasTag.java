@@ -3,6 +3,7 @@ package org.apache.cassandra.service;
 import java.nio.ByteBuffer;
 import java.io.Serializable;
 import java.nio.charset.CharacterCodingException;
+import java.util.List;
 
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -43,7 +44,7 @@ public class TreasTag implements Serializable{
         return this;
     }
 
-    public static String serialize(TreasTag tag) {
+    public static String serializeHelper(TreasTag tag) {
         return tag.toString();
     }
 

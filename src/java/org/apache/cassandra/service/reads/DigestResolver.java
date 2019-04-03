@@ -122,19 +122,19 @@ public class DigestResolver extends ResponseResolver
                     String valTwo = "";
                     String valThree = "";
                     for(Cell c : ri.next().cells()) {
-                        if (c.column().name.equals(TreasConsts.tagOneIdentifier)) {
+                        if (c.column().name.equals(TreasConsts.TAG_ONE_IDENTIFIER)) {
                             tagOne = TreasTag.deserialize(c.value());
                             int count = tagCount.containsKey(tagOne) ? tagCount.get(tagOne) : 0;
                             tagCount.put(tagOne, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.tagTwoIdentifier)) {
+                        } else if (c.column().name.equals(TreasConsts.TAG_TWO_IDENTIFIER)) {
                             tagTwo = TreasTag.deserialize(c.value());
                             int count = tagCount.containsKey(tagTwo) ? tagCount.get(tagTwo) : 0;
                             tagCount.put(tagTwo, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.tagThreeIdentifier)) {
+                        } else if (c.column().name.equals(TreasConsts.TAG_THREE_IDENTIFIER)) {
                             tagThree = TreasTag.deserialize(c.value());
                             int count = tagCount.containsKey(tagThree) ? tagCount.get(tagThree) : 0;
                             tagCount.put(tagThree, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.valOneIdentifier)) {
+                        } else if (c.column().name.equals(TreasConsts.VAL_ONE_IDENTIFIER)) {
                             try {
                                 valOne = ByteBufferUtil.string(c.value());
                             } catch (CharacterCodingException e) {
@@ -145,7 +145,7 @@ public class DigestResolver extends ResponseResolver
                             TagVal tvOne = new TagVal(tagOne, valOne);
                             int count = valCount.containsKey(tvOne) ? valCount.get(tvOne) : 0;
                             valCount.put(tvOne, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.valTwoIdentifier)) {
+                        } else if (c.column().name.equals(TreasConsts.VAL_TWO_IDENTIFIER)) {
                             try {
                                 valTwo = ByteBufferUtil.string(c.value());
                             } catch (CharacterCodingException e) {
@@ -156,7 +156,7 @@ public class DigestResolver extends ResponseResolver
                             TagVal tvTwo = new TagVal(tagTwo, valTwo);
                             int count = valCount.containsKey(tvTwo) ? valCount.get(tvTwo) : 0;
                             valCount.put(tvTwo, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.valThreeIdentifier)) {
+                        } else if (c.column().name.equals(TreasConsts.VAL_THREE_IDENTIFIER)) {
                             try {
                                 valThree = ByteBufferUtil.string(c.value());
                             } catch (CharacterCodingException e) {

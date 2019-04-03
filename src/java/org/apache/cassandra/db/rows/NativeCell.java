@@ -107,6 +107,8 @@ public class NativeCell extends AbstractCell
         return VALUE + length;
     }
 
+    public void setValue(ByteBuffer value){};
+
     public long timestamp()
     {
         return MemoryUtil.getLong(peer + TIMESTAMP);

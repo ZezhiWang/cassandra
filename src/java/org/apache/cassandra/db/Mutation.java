@@ -336,7 +336,7 @@ public class Mutation implements IMutation
     {
         public void serialize(Mutation mutation, DataOutputPlus out, int version) throws IOException
         {
-            /* serialize the modifications in the mutation */
+            /* serializeHelper the modifications in the mutation */
             int size = mutation.modifications.size();
             out.writeUnsignedVInt(size);
 

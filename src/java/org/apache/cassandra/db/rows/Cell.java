@@ -61,6 +61,8 @@ public abstract class Cell extends ColumnData
         super(column);
     }
 
+    public abstract void setValue(ByteBuffer value);
+
     /**
      * Whether the cell is a counter cell or not.
      *
