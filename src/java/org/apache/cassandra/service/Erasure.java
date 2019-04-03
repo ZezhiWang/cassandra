@@ -37,8 +37,8 @@ public class Erasure {
         return String.join(";", strList);
     }
 
-    public static String[] encode(String str) {
-        return str.split(";");
+    public static List<String> encode(String str) {
+        return Arrays.asList(str.split(";"));
     }
 
 //    static public void main(String argv[]) {

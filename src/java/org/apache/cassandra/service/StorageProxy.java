@@ -1453,7 +1453,7 @@ public class StorageProxy implements StorageProxyMBean
                         try
                         {
                             String data = ByteBufferUtil.string(c.value());
-                            dataSplits = splitData(data);
+                            dataSplits = Erasure.encode(data);
                         }
                         catch (CharacterCodingException e)
                         {
@@ -1463,7 +1463,7 @@ public class StorageProxy implements StorageProxyMBean
                 }
             }
         }
-        int nReplications = 2;
+        int nReplications = TreasConsts.K;
         List<MessageOut<Mutation>> replications = createDataPartitionMessages(dataSplits, mutation, nReplications);
         Mutation localMutation = replications.get(0).payload;
 
@@ -2020,7 +2020,7 @@ public class StorageProxy implements StorageProxyMBean
 
         mutationBuilder.update(command.metadata())
                 .timestamp(FBUtilities.timestampMicros()).row()
-                .add(TreasConsts.TAG, TreasTag.serialize(tagValueResult.tv.tag))
+                .add(TreasConsts.TAG, TreasTag.serializeHelper(tagValueResult.tv.tag))
                 .add(TreasConsts.VAL, tagValueResult.tv.val);
 
         Mutation tvMutation = mutationBuilder.build();
