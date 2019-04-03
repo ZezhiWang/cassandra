@@ -32,6 +32,7 @@ import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.TagVal;
 import org.apache.cassandra.utils.MergeIterator;
 
 /**
@@ -316,7 +317,8 @@ public abstract class UnfilteredPartitionIterators
             out.writeBoolean(false);
         }
 
-        public UnfilteredPartitionIterator deserialize(final DataInputPlus in, final int version, final TableMetadata metadata, final ColumnFilter selection, final SerializationHelper.Flag flag) throws IOException
+        public UnfilteredPartitionIterator deserialize(final DataInputPlus in, final int version, final TableMetadata metadata, final ColumnFilter selection,
+                                                       final SerializationHelper.Flag flag, TagVal tv) throws IOException
         {
             // Skip now unused isForThrift boolean
             in.readBoolean();
@@ -373,7 +375,7 @@ public abstract class UnfilteredPartitionIterators
                     try
                     {
                         nextReturned = true;
-                        next = UnfilteredRowIteratorSerializer.serializer.deserialize(in, version, metadata, selection, flag);
+                        next = UnfilteredRowIteratorSerializer.serializer.deserialize(in, version, metadata, selection, flag, tv);
                         return next;
                     }
                     catch (IOException e)

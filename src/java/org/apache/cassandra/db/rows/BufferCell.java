@@ -52,6 +52,7 @@ public class BufferCell extends AbstractCell
     public void  setValue(ByteBuffer value){
         this.value =value;
     }
+
     public static BufferCell live(ColumnMetadata column, long timestamp, ByteBuffer value)
     {
         return live(column, timestamp, value, null);

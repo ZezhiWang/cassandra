@@ -33,6 +33,7 @@ import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.TagVal;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.HashingUtils;
 
@@ -63,6 +64,7 @@ public abstract class ReadResponse
     }
 
     public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command);
+    public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command, TagVal tv);
     public abstract ByteBuffer digest(ReadCommand command);
 
     public abstract boolean isDigestResponse();
@@ -131,6 +133,11 @@ public abstract class ReadResponse
             throw new UnsupportedOperationException();
         }
 
+        public UnfilteredPartitionIterator makeIterator(ReadCommand command, TagVal tv)
+        {
+            throw new UnsupportedOperationException();
+        }
+
         public ByteBuffer digest(ReadCommand command)
         {
             // We assume that the digest is in the proper version, which bug excluded should be true since this is called with
@@ -194,7 +201,11 @@ public abstract class ReadResponse
             this.flag = flag;
         }
 
-        public UnfilteredPartitionIterator makeIterator(ReadCommand command)
+
+        public UnfilteredPartitionIterator makeIterator(ReadCommand command){
+            return makeIterator(command, null);
+        }
+        public UnfilteredPartitionIterator makeIterator(ReadCommand command, TagVal tv)
         {
             try (DataInputBuffer in = new DataInputBuffer(data, true))
             {
@@ -205,7 +216,8 @@ public abstract class ReadResponse
                                                                                          dataSerializationVersion,
                                                                                          command.metadata(),
                                                                                          command.columnFilter(),
-                                                                                         flag);
+                                                                                         flag,
+                        tv);
             }
             catch (IOException e)
             {

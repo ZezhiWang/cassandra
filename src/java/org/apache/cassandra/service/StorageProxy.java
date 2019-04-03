@@ -696,9 +696,6 @@ public class StorageProxy implements StorageProxyMBean
         List<SinglePartitionReadCommand> tagReadList = new ArrayList<>();
         for (IMutation mutation : mutations)
         {
-            // todo: please note that this is not optimal,
-            // fullPartitionRead generates a read that reading ALL
-            // columns of the key, while all we need is ts
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
             int nowInSec = FBUtilities.nowInSeconds();
             DecoratedKey  decoratedKey =  mutation.key();
@@ -714,11 +711,6 @@ public class StorageProxy implements StorageProxyMBean
         TreasTag maxTag = fetchMaxTag(tagReadList, consistency_level, System.nanoTime());
 
         // Treas put
-        // for each incoming mutation,
-        // create a mutation for modifying its z value
-        // please note that we have 2 assumptions
-        // 1. we have an explicit column named z_value in the table
-        // 2. we assume there's only 1 column for each key
         List<IMutation> newMutations = new ArrayList<>();
 
         for (IMutation mutation : mutations)
@@ -1303,6 +1295,15 @@ public class StorageProxy implements StorageProxyMBean
         {
             this.handler = handler;
             this.mutation = mutation;
+        }
+    }
+
+    private static class ResponseAndTagVal{
+        ReadResponse resp;
+        TagVal tv;
+        ResponseAndTagVal(ReadResponse r, TagVal tv){
+            this.resp = r;
+            this.tv = tv;
         }
     }
 
@@ -2008,81 +2009,36 @@ public class StorageProxy implements StorageProxyMBean
 
     private static PartitionIterator fetchRowsTreas(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel)
             throws UnavailableException, ReadFailureException, ReadTimeoutException {
-        // first we have to create a full partition read based on the
-        // incoming read command to cover both value and z_value column
-        List<SinglePartitionReadCommand> tagValueReadList = new ArrayList<>(commands.size());
-        for (SinglePartitionReadCommand readCommand: commands)
-        {
-            SinglePartitionReadCommand tagValueRead =
-            SinglePartitionReadCommand.fullPartitionRead(
-                readCommand.metadata(),
+        SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(
+                commands.get(0).metadata(),
                 FBUtilities.nowInSeconds(),
-                readCommand.partitionKey()
+                commands.get(0).partitionKey()
             );
-            tagValueReadList.add(tagValueRead);
-        }
 
-        // execute the tag value read, the result will be the
-        // tag value pair with the largest tag
-        
-        ReadResponse tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
-        PartitionIterator pi = prepIterator(commands, tagValueResult);
+        ResponseAndTagVal tagValueResult = fetchTagValue(command, consistencyLevel, System.nanoTime());
+        Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(command.metadata().keyspace, command.partitionKey());
 
-        List<IMutation> mutationList = new ArrayList<>();
-        // write the tag value pair with the largest tag to all servers
-        while(pi.hasNext())
-        {
-            // first we have to parse the value and tag from the result
-            // tagValueResult.next() returns a RowIterator
-            RowIterator ri = pi.next();
-            ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.TAG));
-            ColumnMetadata valMetadata = ri.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.VAL));
+        mutationBuilder.update(command.metadata())
+                .timestamp(FBUtilities.timestampMicros()).row()
+                .add(TreasConsts.TAG, TreasTag.serialize(tagValueResult.tv.tag))
+                .add(TreasConsts.VAL, tagValueResult.tv.val);
 
-            assert tagMetaData != null && valMetadata != null;
+        Mutation tvMutation = mutationBuilder.build();
 
-            while(ri.hasNext())
-            {
-                Row r = ri.next();
-
-                TreasTag tag = TreasTag.deserialize(r.getCell(tagMetaData).value());
-
-                String value = "";
-                try{
-                    value = ByteBufferUtil.string(r.getCell(valMetadata).value());
-                } catch (CharacterCodingException e){
-                    logger.error("Unable to decode value");
-                }
-
-                TableMetadata tableMetadata = ri.metadata();
-
-                Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(tableMetadata.keyspace, ri.partitionKey());
-
-                mutationBuilder.update(tableMetadata)
-                        .timestamp(FBUtilities.timestampMicros()).row()
-                        .add(TreasConsts.TAG, TreasTag.serializeHelper(tag))
-                        .add(TreasConsts.VAL, value);
-
-                Mutation tvMutation = mutationBuilder.build();
-
-                mutationList.add(tvMutation);
-            }
-
-
-            // then we will have to perform the mutatation we've just generated
-            mutateDoWrite(mutationList, consistencyLevel, System.nanoTime());
-        }
-
-        return prepIterator(commands, tagValueResult);
+        List<Mutation> mutationList = new ArrayList<>();
+        mutationList.add(tvMutation);
+        mutateDoWrite(mutationList, consistencyLevel, System.nanoTime());
+        return prepIterator(commands, tagValueResult.resp, tagValueResult.tv);
     }
 
-    private static ReadResponse fetchTagValue(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static ResponseAndTagVal fetchTagValue(SinglePartitionReadCommand command, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
     throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
-        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(commands.get(0), consistencyLevel, queryStartNanoTime);
+        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(command, consistencyLevel, queryStartNanoTime);
         read.executeAsyncTreas();
         read.maybeTryAdditionalReplicas();
         read.awaitResponsesTreas();
-        return read.getResult();
+        return new ResponseAndTagVal(read.getResult(),read.getTagVal());
     }
 
     private static TreasTag fetchMaxTag(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
@@ -2092,24 +2048,12 @@ public class StorageProxy implements StorageProxyMBean
         read.executeAsyncTreas();
         read.maybeTryAdditionalReplicas();
         read.awaitTagTreas();
-        return read.getMaxTag();
+        return read.getTagVal().tag;
     }
 
-    private static PartitionIterator prepIteratorNeedUpd(List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
-        List<PartitionIterator> partitionIterators = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : responses){
-            SinglePartitionReadCommand command = commands.get(idx);
-            if(rr.needWriteBack)
-                partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-        return partitionIterators.size() > 0 ? PartitionIterators.concat(partitionIterators) : null;
-    }
-
-    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, ReadResponse response) {
+    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, ReadResponse response, TagVal tv) {
         SinglePartitionReadCommand command = commands.get(0);
-        return UnfilteredPartitionIterators.filter(response.makeIterator(command), command.nowInSec());
+        return UnfilteredPartitionIterators.filter(response.makeIterator(command, tv), command.nowInSec());
     }
 
     public static class LocalReadRunnable extends DroppableRunnable
