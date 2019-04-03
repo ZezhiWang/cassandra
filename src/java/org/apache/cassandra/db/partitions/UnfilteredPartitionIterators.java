@@ -318,6 +318,12 @@ public abstract class UnfilteredPartitionIterators
         }
 
         public UnfilteredPartitionIterator deserialize(final DataInputPlus in, final int version, final TableMetadata metadata, final ColumnFilter selection,
+                                                       final SerializationHelper.Flag flag) throws IOException
+        {
+            return deserialize(in, version, metadata, selection, flag, null);
+        }
+
+        public UnfilteredPartitionIterator deserialize(final DataInputPlus in, final int version, final TableMetadata metadata, final ColumnFilter selection,
                                                        final SerializationHelper.Flag flag, TagVal tv) throws IOException
         {
             // Skip now unused isForThrift boolean
