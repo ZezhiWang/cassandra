@@ -19,6 +19,7 @@
 package org.apache.cassandra.service.treas;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -32,15 +33,14 @@ public class TreasConfig
     public static final ColumnIdentifier CI_TAG = new ColumnIdentifier(ORIGINAL_TAG,true);
     public static final ColumnIdentifier CI_VAL = new ColumnIdentifier(ORIGINAL_VAl,true);
 
+    public Map<String,String> tagToVal = new HashMap<>();
+    public Map<String,String> valToTag = new HashMap<>();
+    public Map<String, ColumnIdentifier> tagToIdentifier = new HashMap<>();
+    public Map<String, ColumnIdentifier> valToIdentifier = new HashMap<>();
 
-    public Map<String,String> tagToVal;
-    public Map<String,String> valToTag;
-    public Map<String, ColumnIdentifier> tagToIdentifier;
-    public Map<String, ColumnIdentifier> valToIdentifier;
-
-    public TreasConfig(int K)
+    public TreasConfig(int delta)
     {
-        for(int r = 0; r<K; r++){
+        for(int r = 0; r<delta; r++){
             String newTag = ORIGINAL_TAG + r;
             String newVal = ORIGINAL_VAl + r;
             tagToVal.put(newTag,newVal);

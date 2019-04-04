@@ -20,10 +20,15 @@ package org.apache.cassandra.service.treas;
 
 public class TreasConsts {
 
-    public static int K = 3;
-    public static int L = 2;
+    public static int K = 5;
+    public static int DELTA = 2;
+    public static int L = K % (DELTA+1) == 0 ? K/(DELTA+1) :K/(DELTA+1)+1;
 
-    public static final TreasConfig CONFIG = new TreasConfig(K);
+    public static TreasConfig CONFIG;
+
+    public static void  init(){
+        CONFIG = new TreasConfig(DELTA);
+    }
 
 
 }
