@@ -30,8 +30,8 @@ public class TreasConfig
 
     public static final String ORIGINAL_VAl = "field";
     public static final String ORIGINAL_TAG = "tag";
-    public Map<String,String> tagToVal;
-    public Map<String,String> valToTag;
+    public Map<String,String> tagToVal = new HashMap<>();
+    public Map<String,String> valToTag = new HashMap<>();
     public Map<String, ColumnIdentifier> tagToIdentifier = new HashMap<>();
     public Map<String, ColumnIdentifier> valToIdentifier = new HashMap<>();
 
