@@ -20,6 +20,7 @@ package org.apache.cassandra.service.reads;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,9 +36,9 @@ import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.service.Erasure;
-import org.apache.cassandra.service.TagVal;
-import org.apache.cassandra.service.TreasConsts;
-import org.apache.cassandra.service.TreasTag;
+import org.apache.cassandra.service.treas.TagVal;
+import org.apache.cassandra.service.treas.TreasConsts;
+import org.apache.cassandra.service.treas.TreasTag;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
@@ -199,9 +200,7 @@ public class DigestResolver extends ResponseResolver
     public TreasTag getMaxTag() {
         TreasTag maxTag = new TreasTag();
 
-        ColumnIdentifier tagOneIdentifier = new ColumnIdentifier(TreasConsts.TAG_ONE, true);
-        ColumnIdentifier tagTwoIdentifier = new ColumnIdentifier(TreasConsts.TAG_TWO, true);
-        ColumnIdentifier tagThreeIdentifier = new ColumnIdentifier(TreasConsts.TAG_THREE, true);
+        Collection<ColumnIdentifier> identifiers = TreasConsts.CONFIG.returnIdentifiers();
 
         for (MessageIn<ReadResponse> message : responses) {
             ReadResponse curResponse = message.payload;
@@ -212,10 +211,7 @@ public class DigestResolver extends ResponseResolver
                 while (ri.hasNext()) {
                     TreasTag curTag = new TreasTag();
                     for (Cell c : ri.next().cells()) {
-                        if (c.column().name.equals(tagOneIdentifier) || c.column().name.equals(tagTwoIdentifier) || c.column().name.equals(tagThreeIdentifier)) {
-                            TreasTag tmpTag = TreasTag.deserialize(c.value());
-                            curTag = tmpTag.isLarger(curTag) ? tmpTag : curTag;
-                        }
+                        for()
                     }
                     if (curTag.isLarger(maxTag)) {
                         maxTag = curTag;

@@ -32,7 +32,7 @@ import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.service.TagVal;
+import org.apache.cassandra.service.treas.TagVal;
 import org.apache.cassandra.utils.MergeIterator;
 
 /**

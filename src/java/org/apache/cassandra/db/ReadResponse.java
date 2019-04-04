@@ -33,7 +33,7 @@ import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.service.TagVal;
+import org.apache.cassandra.service.treas.TagVal;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.HashingUtils;
 

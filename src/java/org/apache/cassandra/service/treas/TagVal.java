@@ -18,35 +18,19 @@
 
 package org.apache.cassandra.service.treas;
 
-import java.util.Collection;
-import java.util.Map;
+import org.apache.cassandra.service.treas.TreasTag;
 
-import org.apache.cassandra.cql3.ColumnIdentifier;
+public class TagVal {
+    public TreasTag tag;
+    public String val;
 
-public class TreasConfig
-{
-
-    public static final String Original_VAl = "field";
-    public static final String Original_TAG = "tag";
-    public Map<String,String> tagToVal;
-    public Map<String, ColumnIdentifier> tagToIdentifier;
-
-    public TreasConfig(int K)
-    {
-        for(int r = 0; r<K; r++){
-            String newTag = Original_TAG+r;
-            String newVal = Original_VAl+r;
-            tagToVal.put(newTag,newVal);
-            ColumnIdentifier newIdentifier = new ColumnIdentifier(newTag, true);
-            tagToIdentifier.put(newTag,newIdentifier);
-        }
-
+    public TagVal(){
+        this.tag = new TreasTag();
+        this.val = "";
     }
 
-    public Collection<ColumnIdentifier> returnIdentifiers(){
-        return tagToIdentifier.values();
+    public TagVal(TreasTag t, String v){
+        this.tag = t;
+        this.val = v;
     }
-
-
-
 }

@@ -22,8 +22,8 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
-import org.apache.cassandra.service.TagVal;
-import org.apache.cassandra.service.TreasTag;
+import org.apache.cassandra.service.treas.TagVal;
+import org.apache.cassandra.service.treas.TreasTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
