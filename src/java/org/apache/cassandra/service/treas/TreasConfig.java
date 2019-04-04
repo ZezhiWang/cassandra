@@ -34,9 +34,9 @@ public class TreasConfig
     public Map<String, ColumnIdentifier> tagToIdentifier;
     public Map<String, ColumnIdentifier> valToIdentifier;
 
-    public TreasConfig(int K)
+    public TreasConfig(int delta)
     {
-        for(int r = 0; r<K; r++){
+        for(int r = 0; r<delta; r++){
             String newTag = ORIGINAL_TAG + r;
             String newVal = ORIGINAL_VAl + r;
             tagToVal.put(newTag,newVal);
