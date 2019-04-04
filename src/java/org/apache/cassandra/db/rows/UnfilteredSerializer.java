@@ -30,6 +30,7 @@ import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.service.treas.TagVal;
+import org.apache.cassandra.service.treas.TreasConfig;
 import org.apache.cassandra.service.treas.TreasConsts;
 import org.apache.cassandra.service.treas.TreasTag;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -484,9 +485,9 @@ public class UnfilteredSerializer
             Row r = deserializeRowBody(in, header, helper, flags, extendedFlags, builder);
             if(tv != null){
                 for(Cell c : r.cells()){
-                    if(c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_TAG)){
+                    if(c.column().name.equals(TreasConfig.CI_TAG)){
                         c.setValue(ByteBufferUtil.bytes(TreasTag.serializeHelper(tv.tag)));
-                    } else if (c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_VAl)){
+                    } else if (c.column().name.equals(TreasConfig.CI_VAL)){
                         c.setValue(ByteBufferUtil.bytes(tv.val));
                     }
                 }

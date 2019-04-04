@@ -26,9 +26,13 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 
 public class TreasConfig
 {
-
     public static final String ORIGINAL_VAl = "field";
     public static final String ORIGINAL_TAG = "tag";
+
+    public static final ColumnIdentifier CI_TAG = new ColumnIdentifier(ORIGINAL_TAG,true);
+    public static final ColumnIdentifier CI_VAL = new ColumnIdentifier(ORIGINAL_VAl,true);
+
+
     public Map<String,String> tagToVal;
     public Map<String,String> valToTag;
     public Map<String, ColumnIdentifier> tagToIdentifier;

@@ -36,6 +36,8 @@ import com.google.common.collect.*;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.Uninterruptibles;
 
+import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.service.treas.TreasConfig;
 import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
@@ -726,7 +728,7 @@ public class StorageProxy implements StorageProxyMBean
             mutationBuilder.update(tableMetadata)
                     .timestamp(timeStamp)
                     .row()
-                    .add(TreasConsts.CONFIG.ORIGINAL_TAG, TreasTag.serializeHelper(maxTag.nextTag()));
+                    .add(TreasConfig.ORIGINAL_TAG, TreasTag.serializeHelper(maxTag.nextTag()));
 
             Mutation tagMutation = mutationBuilder.build();
 
@@ -910,7 +912,7 @@ public class StorageProxy implements StorageProxyMBean
                 Set<Mutation> nonLocalMutations = new HashSet<>(mutations);
                 Token baseToken = StorageService.instance.getTokenMetadata().partitioner.getToken(dataKey);
 
-                ConsistencyLevel consistencyLevel = ConsistencyLevel.ONE;
+                ConsistencyLevel consistencyLevel = ConsistencyLevel.TREAS;
 
                 //Since the base -> view replication is 1:1 we only need to store the BL locally
                 final Collection<InetAddressAndPort> batchlogEndpoints = Collections.singleton(FBUtilities.getBroadcastAddressAndPort());
@@ -1138,7 +1140,7 @@ public class StorageProxy implements StorageProxyMBean
     {
         WriteResponseHandler<?> handler = new WriteResponseHandler<>(endpoints,
                                                                      Collections.emptyList(),
-                                                                     endpoints.size() == 1 ? ConsistencyLevel.ONE : ConsistencyLevel.TWO,
+                                                                     endpoints.size() == 1 ? ConsistencyLevel.TREAS : ConsistencyLevel.TWO,
                                                                      Keyspace.open(SchemaConstants.SYSTEM_KEYSPACE_NAME),
                                                                      null,
                                                                      WriteType.BATCH_LOG,
@@ -1330,7 +1332,7 @@ public class StorageProxy implements StorageProxyMBean
             if (consistencyLevel == ConsistencyLevel.ANY)
                 return Collections.singleton(FBUtilities.getBroadcastAddressAndPort());
 
-            throw new UnavailableException(ConsistencyLevel.ONE, 1, 0);
+            throw new UnavailableException(ConsistencyLevel.TREAS, 1, 0);
         }
 
         return chosenEndpoints;
@@ -1450,7 +1452,7 @@ public class StorageProxy implements StorageProxyMBean
                 {
                     logger.info(c.column().name.toString());
 
-                    if (c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_VAl))
+                    if (c.column().name.equals(TreasConfig.CI_VAL))
                     {
                         logger.info("In data cell");
                         try
@@ -1526,7 +1528,7 @@ public class StorageProxy implements StorageProxyMBean
                     for (Cell c : row.cells())
 
                     {
-                        if (c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_VAl))
+                        if (c.column().name.equals(TreasConfig.CI_VAL))
                         {
 
                             String newValue = dataSplits.get(r);
@@ -1962,7 +1964,7 @@ public class StorageProxy implements StorageProxyMBean
         // the original fetchRows will be used, this is a workaround
         // to the initialization failure issue
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
-        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.CONFIG.ORIGINAL_TAG));
+        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(TreasConfig.ORIGINAL_TAG));
         if(tagMetadata != null)
             return fetchRowsTreas(commands, consistencyLevel);
 
@@ -2023,8 +2025,8 @@ public class StorageProxy implements StorageProxyMBean
 
         mutationBuilder.update(command.metadata())
                 .timestamp(FBUtilities.timestampMicros()).row()
-                .add(TreasConsts.CONFIG.ORIGINAL_TAG, TreasTag.serializeHelper(tagValueResult.tv.tag))
-                .add(TreasConsts.CONFIG.ORIGINAL_VAl, tagValueResult.tv.val);
+                .add(TreasConfig.ORIGINAL_TAG, TreasTag.serializeHelper(tagValueResult.tv.tag))
+                .add(TreasConfig.ORIGINAL_VAl, tagValueResult.tv.val);
 
         Mutation tvMutation = mutationBuilder.build();
 

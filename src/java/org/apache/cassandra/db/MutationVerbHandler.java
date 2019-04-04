@@ -38,6 +38,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.treas.TreasConfig;
 import org.apache.cassandra.service.treas.TreasConsts;
 import org.apache.cassandra.service.treas.TreasTag;
 import org.apache.cassandra.tracing.Tracing;
@@ -151,12 +152,12 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             for (Cell c : data.cells())
             {
 
-                if(c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_TAG))
+                if(c.column().name.equals(TreasConfig.CI_TAG))
                 {
                     tagRemote = TreasTag.deserialize(c.value());
                     logger.info("recv remote {}", tagRemote.toString());
                 }
-                else if(c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_VAl)){
+                else if(c.column().name.equals(TreasConfig.CI_VAL)){
                     writtenValue = c.value();
                 }
             }

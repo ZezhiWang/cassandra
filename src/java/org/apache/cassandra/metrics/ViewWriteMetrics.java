@@ -28,7 +28,7 @@ public class ViewWriteMetrics extends ClientRequestMetrics
 {
     public final Counter viewReplicasAttempted;
     public final Counter viewReplicasSuccess;
-    // time between when mutation is applied to local memtable to when CL.ONE is achieved on MV
+    // time between when mutation is applied to local memtable to when CL.TREAS is achieved on MV
     public final Timer viewWriteLatency;
 
     public ViewWriteMetrics(String scope)
