@@ -19,14 +19,12 @@ package org.apache.cassandra.db;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
@@ -106,7 +104,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         oldMutation.key()
         );
 
-        boolean initializedTags = true;
+        boolean initializedTags = false;
         TreasTag largestTag = new TreasTag();
         TreasTag smallestTag = new TreasTag();
         String nameOfSmallestColumnTag = null;
@@ -130,30 +128,28 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     {
                         ColumnMetadata colMetaTagOne = ri.metadata().getColumn(ByteBufferUtil.bytes(tag));
                         Cell ctag = r.getCell(colMetaTagOne);
-                        if (ctag == null)
-                        {
+                        if (ctag == null){
                             logger.info("Tag not initialized");
-                            initializedTags = false;
                             break;
                         }
                         else{
                             tagToCell.put(tag,ctag);
+                            initializedTags = true;
                         }
-                    }if(!initializedTags){
-
-                    for(String tagName: TreasConsts.CONFIG.returnTags()){
-                        Cell ctag = tagToCell.get(tagName);
-                        TreasTag tag = TreasTag.deserialize(ctag.value());
-                        if(tag.isLarger(largestTag)){
-                            nameOfLargestColumnTag = tagName;
-                            largestTag=tag;
-                        }
-                        if(smallestTag.isLarger(tag)){
-                            smallestTag = tag;
-                            nameOfSmallestColumnTag = tagName;
+                    }if(initializedTags){
+                        for(String tagName: TreasConsts.CONFIG.returnTags()){
+                            Cell ctag = tagToCell.get(tagName);
+                            TreasTag tag = TreasTag.deserialize(ctag.value());
+                            if(tag.isLarger(largestTag)){
+                                nameOfLargestColumnTag = tagName;
+                                largestTag=tag;
+                            }
+                            if(smallestTag.isLarger(tag)){
+                                smallestTag = tag;
+                                nameOfSmallestColumnTag = tagName;
+                            }
                         }
                     }
-                }
                 }
             }
         }
@@ -163,16 +159,12 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         Row data = oldMutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
         ByteBuffer writtenValue = null;
 
-
         for (Cell c : data.cells())
         {
-
-            if(c.column().name.equals(TreasConfig.CI_TAG))
-            {
+            if(c.column().name.equals(TreasConfig.CI_TAG)){
                 tagRemote = TreasTag.deserialize(c.value());
                 logger.info("recv remote {}", tagRemote.toString());
-            }
-            else if(c.column().name.equals(TreasConfig.CI_VAL)){
+            } else if(c.column().name.equals(TreasConfig.CI_VAL)){
                 writtenValue = c.value();
             }
         }
@@ -219,7 +211,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     }
                     else
                     {
-                        String nameOfSmallestColumnVal = TreasConsts.CONFIG.getVal(nameOfSmallestColumnTag);
+//                        String nameOfSmallestColumnVal = TreasConsts.CONFIG.getVal(nameOfSmallestColumnTag);
                         String nameOfLargestColumnVal = TreasConsts.CONFIG.getVal(nameOfLargestColumnTag);
                         if (tagRemote.isLarger(largestTag))
                         {
@@ -231,14 +223,14 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                         {
                             rowBuilder.add(nameOfSmallestColumnTag, remoteTagString);
                         }
-                        rowBuilder.add(nameOfSmallestColumnVal, emptyValue);
+//                        rowBuilder.add(nameOfSmallestColumnVal, emptyValue);
                     }
                 }
             }
             Mutation newMutation = mutationBuilder.build();
-            return new Pair<Boolean, Mutation>(true, newMutation);
+            return new Pair<>(true, newMutation);
         }
-        return new Pair<Boolean, Mutation>(false,null);
+        return new Pair<>(false,null);
     }
 
     private static void forwardToLocalNodes(Mutation mutation, MessagingService.Verb verb, ForwardToContainer forwardTo, InetAddressAndPort from) throws IOException
