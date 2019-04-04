@@ -20,11 +20,15 @@ package org.apache.cassandra.service.treas;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.cassandra.cql3.ColumnIdentifier;
 
 public class TreasConfig
 {
+
+    public static final String ORIGINAL_VAl = "field";
+    public static final String ORIGINAL_TAG = "tag";
     public Map<String,String> tagToVal;
     public Map<String,String> valToTag;
     public Map<String, ColumnIdentifier> tagToIdentifier;
@@ -33,12 +37,14 @@ public class TreasConfig
     public TreasConfig(int K)
     {
         for(int r = 0; r<K; r++){
-            String newTag = TreasConsts.TAG+r;
-            String newVal = TreasConsts.VAL+r;
+            String newTag = ORIGINAL_TAG + r;
+            String newVal = ORIGINAL_VAl + r;
             tagToVal.put(newTag,newVal);
             valToTag.put(newVal,newTag);
-            tagToIdentifier.put(newTag,new ColumnIdentifier(newTag, true));
-            valToIdentifier.put(newVal, new ColumnIdentifier(newVal, true));
+            ColumnIdentifier newTagIdentifier = new ColumnIdentifier(newTag, true);
+            ColumnIdentifier newValIdentifier = new ColumnIdentifier(newVal, true);
+            valToIdentifier.put(newVal,newValIdentifier);
+            tagToIdentifier.put(newTag,newTagIdentifier);
         }
 
     }
@@ -47,8 +53,12 @@ public class TreasConfig
         return tagToIdentifier.values();
     }
 
-    public Collection<ColumnIdentifier> valIdentifiers(){
-        return valToIdentifier.values();
-    }
+    public Set<String> returnTags(){return tagToIdentifier.keySet();}
+
+    public String getVal(String tag){return  tagToVal.get(tag);}
+
+    public Set<Map.Entry<String,String>> getTagToIdValSet(){return tagToVal.entrySet(); }
+
+
 
 }

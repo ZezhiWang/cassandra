@@ -726,7 +726,7 @@ public class StorageProxy implements StorageProxyMBean
             mutationBuilder.update(tableMetadata)
                     .timestamp(timeStamp)
                     .row()
-                    .add(TreasConsts.TAG, TreasTag.serializeHelper(maxTag.nextTag()));
+                    .add(TreasConsts.CONFIG.ORIGINAL_TAG, TreasTag.serializeHelper(maxTag.nextTag()));
 
             Mutation tagMutation = mutationBuilder.build();
 
@@ -1450,7 +1450,7 @@ public class StorageProxy implements StorageProxyMBean
                 {
                     logger.info(c.column().name.toString());
 
-                    if (c.column().name.equals(TreasConsts.ORIGINAL_VAL_IDENTIFIER))
+                    if (c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_VAl))
                     {
                         logger.info("In data cell");
                         try
@@ -1526,7 +1526,7 @@ public class StorageProxy implements StorageProxyMBean
                     for (Cell c : row.cells())
 
                     {
-                        if (c.column().name.equals(TreasConsts.ORIGINAL_VAL_IDENTIFIER))
+                        if (c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_VAl))
                         {
 
                             String newValue = dataSplits.get(r);
@@ -1962,7 +1962,7 @@ public class StorageProxy implements StorageProxyMBean
         // the original fetchRows will be used, this is a workaround
         // to the initialization failure issue
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
-        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.TAG));
+        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(TreasConsts.CONFIG.ORIGINAL_TAG));
         if(tagMetadata != null)
             return fetchRowsTreas(commands, consistencyLevel);
 
@@ -2023,8 +2023,8 @@ public class StorageProxy implements StorageProxyMBean
 
         mutationBuilder.update(command.metadata())
                 .timestamp(FBUtilities.timestampMicros()).row()
-                .add(TreasConsts.TAG, TreasTag.serializeHelper(tagValueResult.tv.tag))
-                .add(TreasConsts.VAL, tagValueResult.tv.val);
+                .add(TreasConsts.CONFIG.ORIGINAL_TAG, TreasTag.serializeHelper(tagValueResult.tv.tag))
+                .add(TreasConsts.CONFIG.ORIGINAL_VAl, tagValueResult.tv.val);
 
         Mutation tvMutation = mutationBuilder.build();
 

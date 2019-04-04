@@ -24,8 +24,6 @@ public class TreasConsts {
     public static int L = 2;
 
     public static final TreasConfig CONFIG = new TreasConfig(K);
-    public static final String TAG = "tag";
-    public static final String VAL =  "field0";
 
 
 }

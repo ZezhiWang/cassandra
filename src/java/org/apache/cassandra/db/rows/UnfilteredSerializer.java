@@ -484,9 +484,9 @@ public class UnfilteredSerializer
             Row r = deserializeRowBody(in, header, helper, flags, extendedFlags, builder);
             if(tv != null){
                 for(Cell c : r.cells()){
-                    if(c.column().name.equals(TreasConsts.ORIGINIAL_TAG_IDENTIFIER)){
+                    if(c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_TAG)){
                         c.setValue(ByteBufferUtil.bytes(TreasTag.serializeHelper(tv.tag)));
-                    } else if (c.column().name.equals(TreasConsts.ORIGINAL_VAL_IDENTIFIER)){
+                    } else if (c.column().name.equals(TreasConsts.CONFIG.ORIGINAL_VAl)){
                         c.setValue(ByteBufferUtil.bytes(tv.val));
                     }
                 }
