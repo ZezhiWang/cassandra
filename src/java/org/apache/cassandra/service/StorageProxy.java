@@ -1439,6 +1439,7 @@ public class StorageProxy implements StorageProxyMBean
 
         List<PartitionUpdate> partitionUpdates = mutation.getPartitionUpdates().asList();
         List<String> dataSplits = null;
+        int nReplications = targetsSize;
         for (PartitionUpdate partitionUpdate : partitionUpdates)
         {
             Iterator<Row> rowIterator = partitionUpdate.iterator();
@@ -1457,7 +1458,7 @@ public class StorageProxy implements StorageProxyMBean
                         try
                         {
                             String data = ByteBufferUtil.string(c.value());
-                            dataSplits = Erasure.encode(data);
+                            dataSplits = Erasure.encode(data,nReplications);
                         }
                         catch (CharacterCodingException e)
                         {
@@ -1467,7 +1468,6 @@ public class StorageProxy implements StorageProxyMBean
                 }
             }
         }
-        int nReplications = TreasConsts.K;
         List<MessageOut<Mutation>> replications = createDataPartitionMessages(dataSplits, mutation, nReplications);
         Mutation localMutation = replications.get(0).payload;
 
@@ -1478,9 +1478,11 @@ public class StorageProxy implements StorageProxyMBean
             submitHint(mutation, endpointsToHint, responseHandler);
 
         if (insertLocal){
-            performLocally(stage, Optional.of(mutation), mutation::apply, responseHandler);
             logger.info("Performing local changes");
-            performLocally(stage, Optional.of(localMutation), localMutation::apply, responseHandler);
+            Pair<Boolean,Mutation> booleanMutationPair = MutationVerbHandler.createTreasMutation(localMutation);
+            if(booleanMutationPair.left){
+                performLocally(stage, Optional.of(booleanMutationPair.right), booleanMutationPair.right::apply, responseHandler);
+            }
         }
 
         if (localDc != null)
@@ -1500,13 +1502,6 @@ public class StorageProxy implements StorageProxyMBean
             for (Collection<InetAddressAndPort> dcTargets : dcGroups.values())
                 sendMessagesToNonlocalDC(message, dcTargets, responseHandler);
         }
-    }
-    private static List<String> splitData(String data){
-        List<String> dataSplits = new ArrayList<>();
-        dataSplits.add(data.substring(0,2));
-        dataSplits.add(data.substring(2,4));
-        return dataSplits;
-
     }
 
     private static List<MessageOut<Mutation>> createDataPartitionMessages(List<String> dataSplits,

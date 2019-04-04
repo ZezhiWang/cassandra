@@ -227,7 +227,7 @@ public class JavaDriverClient
                 return com.datastax.driver.core.ConsistencyLevel.ANY;
             case ONE:
                 return com.datastax.driver.core.ConsistencyLevel.ONE;
-            case TWO:
+            case TREAS:
                 return com.datastax.driver.core.ConsistencyLevel.TWO;
             case THREE:
                 return com.datastax.driver.core.ConsistencyLevel.THREE;

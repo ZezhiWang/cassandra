@@ -37,8 +37,16 @@ public class Erasure {
         return String.join(";", strList);
     }
 
-    public static List<String> encode(String str) {
-        return Arrays.asList(str.split(";"));
+    public static List<String> encode(String data,int numberOfReplications) {
+        assert (data.length() >= numberOfReplications);
+        List<String> dataSplits = new ArrayList<>();
+        int i;
+        for(i=0; i<numberOfReplications-1;i++){
+            dataSplits.add(data.substring(i,i+1));
+        }
+        dataSplits.add(data.substring(i));
+        return dataSplits;
+
     }
 
 //    static public void main(String argv[]) {
