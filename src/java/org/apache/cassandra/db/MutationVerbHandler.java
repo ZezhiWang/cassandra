@@ -177,7 +177,9 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             }
         }
         ByteBuffer emptyValue = ByteBufferUtil.bytes("");
-        ByteBuffer treasTagBytes = ByteBufferUtil.bytes(TreasTag.serializeHelper(new TreasTag()));
+        String emptyTagString = TreasTag.serializeHelper(new TreasTag());
+        String remoteTagString = TreasTag.serializeHelper(tagRemote);
+        String largestTagString = TreasTag.serializeHelper(largestTag);
 
         Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(oldMutation.getKeyspaceName(), oldMutation.key());
 
@@ -185,7 +187,6 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         Row.SimpleBuilder rowBuilder = mutationBuilder.update(tableMetadata)
                                                       .timestamp(timeStamp)
                                                       .row();
-
         if(!initializedTags || tagRemote.isLarger(smallestTag))
         {
             List<PartitionUpdate> partitionUpdates = oldMutation.getPartitionUpdates().asList();
@@ -205,13 +206,13 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                             String valueName = pair.getValue();
                             if (firstValue)
                             {
-                                rowBuilder.add(tagName, tagRemote);
+                                rowBuilder.add(tagName, remoteTagString);
                                 rowBuilder.add(valueName, writtenValue);
                                 firstValue = false;
                             }
                             else
                             {
-                                rowBuilder.add(tagName, treasTagBytes);
+                                rowBuilder.add(tagName, emptyTagString);
                                 rowBuilder.add(valueName, emptyValue);
                             }
                         }
@@ -222,13 +223,13 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                         String nameOfLargestColumnVal = TreasConsts.CONFIG.getVal(nameOfLargestColumnTag);
                         if (tagRemote.isLarger(largestTag))
                         {
-                            rowBuilder.add(nameOfLargestColumnTag, tagRemote);
+                            rowBuilder.add(nameOfLargestColumnTag, remoteTagString);
                             rowBuilder.add(nameOfLargestColumnVal, writtenValue);
-                            rowBuilder.add(nameOfSmallestColumnTag, largestTag);
+                            rowBuilder.add(nameOfSmallestColumnTag, largestTagString);
                         }
                         else
                         {
-                            rowBuilder.add(nameOfSmallestColumnTag, tagRemote);
+                            rowBuilder.add(nameOfSmallestColumnTag, remoteTagString);
                         }
                         rowBuilder.add(nameOfSmallestColumnVal, emptyValue);
                     }
