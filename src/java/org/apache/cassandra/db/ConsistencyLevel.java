@@ -39,8 +39,8 @@ import org.apache.cassandra.transport.ProtocolException;
 public enum ConsistencyLevel
 {
     ANY         (0),
-    TREAS       (1),
-    TWO         (2),
+    ONE       (1),
+    TREAS         (2),
     THREE       (3),
     QUORUM      (4),
     ALL         (5),
@@ -111,12 +111,11 @@ public enum ConsistencyLevel
         {
             case TREAS:
                 return treasFor(keyspace);
+            case ONE:
             case LOCAL_ONE:
                 return 1;
             case ANY:
                 return 1;
-            case TWO:
-                return 2;
             case THREE:
                 return 3;
             case QUORUM:
