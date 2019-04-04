@@ -36,7 +36,6 @@ import com.google.common.collect.*;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.Uninterruptibles;
 
-import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.service.treas.TreasConfig;
 import org.apache.commons.lang3.StringUtils;
 
@@ -912,7 +911,7 @@ public class StorageProxy implements StorageProxyMBean
                 Set<Mutation> nonLocalMutations = new HashSet<>(mutations);
                 Token baseToken = StorageService.instance.getTokenMetadata().partitioner.getToken(dataKey);
 
-                ConsistencyLevel consistencyLevel = ConsistencyLevel.TREAS;
+                ConsistencyLevel consistencyLevel = ConsistencyLevel.ONE;
 
                 //Since the base -> view replication is 1:1 we only need to store the BL locally
                 final Collection<InetAddressAndPort> batchlogEndpoints = Collections.singleton(FBUtilities.getBroadcastAddressAndPort());
@@ -1140,7 +1139,7 @@ public class StorageProxy implements StorageProxyMBean
     {
         WriteResponseHandler<?> handler = new WriteResponseHandler<>(endpoints,
                                                                      Collections.emptyList(),
-                                                                     endpoints.size() == 1 ? ConsistencyLevel.TREAS : ConsistencyLevel.TWO,
+                                                                     endpoints.size() == 1 ? ConsistencyLevel.ONE : ConsistencyLevel.TREAS,
                                                                      Keyspace.open(SchemaConstants.SYSTEM_KEYSPACE_NAME),
                                                                      null,
                                                                      WriteType.BATCH_LOG,
@@ -1332,7 +1331,7 @@ public class StorageProxy implements StorageProxyMBean
             if (consistencyLevel == ConsistencyLevel.ANY)
                 return Collections.singleton(FBUtilities.getBroadcastAddressAndPort());
 
-            throw new UnavailableException(ConsistencyLevel.TREAS, 1, 0);
+            throw new UnavailableException(ConsistencyLevel.ONE, 1, 0);
         }
 
         return chosenEndpoints;

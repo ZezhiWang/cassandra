@@ -39,8 +39,8 @@ import org.apache.cassandra.transport.ProtocolException;
 public enum ConsistencyLevel
 {
     ANY         (0),
-    ONE       (1),
-    TREAS         (2),
+    ONE         (1),
+    TREAS       (2),
     THREE       (3),
     QUORUM      (4),
     ALL         (5),
