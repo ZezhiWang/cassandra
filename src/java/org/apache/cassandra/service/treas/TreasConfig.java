@@ -25,28 +25,30 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 
 public class TreasConfig
 {
-
-    public static final String Original_VAl = "field";
-    public static final String Original_TAG = "tag";
     public Map<String,String> tagToVal;
+    public Map<String,String> valToTag;
     public Map<String, ColumnIdentifier> tagToIdentifier;
+    public Map<String, ColumnIdentifier> valToIdentifier;
 
     public TreasConfig(int K)
     {
         for(int r = 0; r<K; r++){
-            String newTag = Original_TAG+r;
-            String newVal = Original_VAl+r;
+            String newTag = TreasConsts.TAG+r;
+            String newVal = TreasConsts.VAL+r;
             tagToVal.put(newTag,newVal);
-            ColumnIdentifier newIdentifier = new ColumnIdentifier(newTag, true);
-            tagToIdentifier.put(newTag,newIdentifier);
+            valToTag.put(newVal,newTag);
+            tagToIdentifier.put(newTag,new ColumnIdentifier(newTag, true));
+            valToIdentifier.put(newVal, new ColumnIdentifier(newVal, true));
         }
 
     }
 
-    public Collection<ColumnIdentifier> returnIdentifiers(){
+    public Collection<ColumnIdentifier> tagIdentifiers(){
         return tagToIdentifier.values();
     }
 
-
+    public Collection<ColumnIdentifier> valIdentifiers(){
+        return valToIdentifier.values();
+    }
 
 }

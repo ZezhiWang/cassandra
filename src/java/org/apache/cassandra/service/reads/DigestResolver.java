@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import com.fasterxml.jackson.databind.deser.std.MapEntryDeserializer;
 import com.google.common.base.Preconditions;
 
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -117,60 +118,45 @@ public class DigestResolver extends ResponseResolver
             while(pi.hasNext())
             {
                 RowIterator ri = pi.next();
+                Boolean flag = false;
                 while(ri.hasNext())
                 {
-                    TreasTag tagOne = null;
-                    TreasTag tagTwo = null;
-                    TreasTag tagThree = null;
-                    String valOne = "";
-                    String valTwo = "";
-                    String valThree = "";
+                    Map<String,TreasTag> tagM = new HashMap<>();
                     for(Cell c : ri.next().cells()) {
-                        if (c.column().name.equals(TreasConsts.TAG_ONE_IDENTIFIER)) {
-                            tagOne = TreasTag.deserialize(c.value());
-                            int count = tagCount.containsKey(tagOne) ? tagCount.get(tagOne) : 0;
-                            tagCount.put(tagOne, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.TAG_TWO_IDENTIFIER)) {
-                            tagTwo = TreasTag.deserialize(c.value());
-                            int count = tagCount.containsKey(tagTwo) ? tagCount.get(tagTwo) : 0;
-                            tagCount.put(tagTwo, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.TAG_THREE_IDENTIFIER)) {
-                            tagThree = TreasTag.deserialize(c.value());
-                            int count = tagCount.containsKey(tagThree) ? tagCount.get(tagThree) : 0;
-                            tagCount.put(tagThree, count + 1);
-                        } else if (c.column().name.equals(TreasConsts.VAL_ONE_IDENTIFIER)) {
-                            try {
-                                valOne = ByteBufferUtil.string(c.value());
-                            } catch (CharacterCodingException e) {
-                                logger.info("Unable to cast valOne");
+                        for (Map.Entry<String,ColumnIdentifier> ety : TreasConsts.CONFIG.tagToIdentifier.entrySet()){
+                            if (c.column().name.equals(ety.getValue())){
+                                String tagKey = ety.getKey();
+                                TreasTag tmpTag = TreasTag.deserialize(c.value());
+                                tagM.put(tagKey,tmpTag);
+                                int count = tagCount.containsKey(tagKey) ? tagCount.get(tagKey) : 0;
+                                tagCount.put(tmpTag, count + 1);
+
+                                flag = true;
+                                break;
                             }
-                            if (valOne.equals(""))
-                                continue;
-                            List<String> valList = valCount.containsKey(tagOne) ? valCount.get(tagOne) : new ArrayList<>();
-                            valList.add(valOne);
-                            valCount.put(tagOne, valList);
-                        } else if (c.column().name.equals(TreasConsts.VAL_TWO_IDENTIFIER)) {
-                            try {
-                                valTwo = ByteBufferUtil.string(c.value());
-                            } catch (CharacterCodingException e) {
-                                logger.info("Unable to cast valOne");
+                        }
+
+                        if (flag){
+                            flag = false;
+                            continue;
+                        }
+
+                        for (Map.Entry<String,ColumnIdentifier> ety : TreasConsts.CONFIG.valToIdentifier.entrySet()){
+                            if (c.column().name.equals(ety.getValue())){
+                                String tmpVal = "";
+                                try {
+                                    tmpVal = ByteBufferUtil.string(c.value());
+                                } catch (CharacterCodingException e) {
+                                    logger.info("Unable to cast valOne");
+                                }
+                                if (tmpVal.equals(""))
+                                    break;
+                                TreasTag tmpTag = tagM.get(TreasConsts.CONFIG.valToTag.get(ety.getKey()));
+                                List<String> valList = valCount.containsKey(tmpTag) ? valCount.get(tmpTag) : new ArrayList<>();
+                                valList.add(tmpVal);
+                                valCount.put(tmpTag, valList);
+                                break;
                             }
-                            if (valTwo.equals(""))
-                                continue;
-                            List<String> valList = valCount.containsKey(tagTwo) ? valCount.get(tagTwo) : new ArrayList<>();
-                            valList.add(valTwo);
-                            valCount.put(tagTwo, valList);
-                        } else if (c.column().name.equals(TreasConsts.VAL_THREE_IDENTIFIER)) {
-                            try {
-                                valThree = ByteBufferUtil.string(c.value());
-                            } catch (CharacterCodingException e) {
-                                logger.info("Unable to cast valOne");
-                            }
-                            if (valThree.equals(""))
-                                continue;
-                            List<String> valList = valCount.containsKey(tagThree) ? valCount.get(tagThree) : new ArrayList<>();
-                            valList.add(valThree);
-                            valCount.put(tagThree, valList);
                         }
                     }
                 }
@@ -200,8 +186,6 @@ public class DigestResolver extends ResponseResolver
     public TreasTag getMaxTag() {
         TreasTag maxTag = new TreasTag();
 
-        Collection<ColumnIdentifier> identifiers = TreasConsts.CONFIG.returnIdentifiers();
-
         for (MessageIn<ReadResponse> message : responses) {
             ReadResponse curResponse = message.payload;
             assert !curResponse.isDigestResponse();
@@ -211,7 +195,12 @@ public class DigestResolver extends ResponseResolver
                 while (ri.hasNext()) {
                     TreasTag curTag = new TreasTag();
                     for (Cell c : ri.next().cells()) {
-                        for()
+                        for(ColumnIdentifier ci : TreasConsts.CONFIG.tagIdentifiers()){
+                            if(c.column().name.equals(ci)){
+                                TreasTag tmpTag = TreasTag.deserialize(c.value());
+                                curTag = tmpTag.isLarger(curTag) ? tmpTag : curTag;
+                            }
+                        }
                     }
                     if (curTag.isLarger(maxTag)) {
                         maxTag = curTag;
