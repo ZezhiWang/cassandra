@@ -162,13 +162,21 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             }
             ByteBuffer emptyValue = ByteBufferUtil.bytes("");
             ByteBuffer treasTagBytes = ByteBufferUtil.bytes(TreasTag.serializeHelper(new TreasTag()));
+            Mutation mutation = message.payload;
+
+            Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(mutation.getKeyspaceName(), mutation.key());
+
+            TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
+            long timeStamp = FBUtilities.timestampMicros();
+            Row.SimpleBuilder rowBuilder = mutationBuilder.update(tableMetadata)
+                                                          .timestamp(timeStamp)
+                                                          .row();
+
             if(!initializedTags || tagRemote.isLarger(smallestTag))
             {
-                Mutation mutation = message.payload;
                 List<PartitionUpdate> partitionUpdates = mutation.getPartitionUpdates().asList();
                 for (PartitionUpdate partitionUpdate : partitionUpdates)
                 {
-                    TableMetadata tableMetadata = partitionUpdate.metadata();
                     Iterator<Row> ri = partitionUpdate.iterator();
                     while (ri.hasNext())
                     {
@@ -180,46 +188,36 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                             for(Map.Entry<String,String> pair: TreasConsts.CONFIG.getTagToIdValSet()) {
                                 String tagName = pair.getKey();
                                 String valueName = pair.getValue();
-                                ColumnMetadata colMetaTag = tableMetadata.getColumn(ByteBufferUtil.bytes(tagName));
-                                ColumnMetadata colMetaVal = tableMetadata.getColumn(ByteBufferUtil.bytes(valueName));
-                                Cell cTag = r.getCell(colMetaTag);
-                                Cell cVal = r.getCell(colMetaVal);
                                 if(firstValue){
-                                    cTag.setValue(ByteBufferUtil.bytes(TreasTag.serializeHelper(tagRemote)));
-                                    cVal.setValue(writtenValue);
+                                    rowBuilder.add(tagName, tagRemote);
+                                    rowBuilder.add(valueName,writtenValue);
                                     firstValue = false;
                                 }
                                 else{
-                                    cTag.setValue(treasTagBytes);
-                                    cTag.setValue(emptyValue);
+                                    rowBuilder.add(tagName, treasTagBytes);
+                                    rowBuilder.add(valueName,emptyValue);
                                 }
                             }
                         }
                         else{
                             String nameOfSmallestColumnVal = TreasConsts.CONFIG.getVal(nameOfSmallestColumnTag);
                             String nameOfLargestColumnVal  = TreasConsts.CONFIG.getVal(nameOfLargestColumnTag);
-                            ColumnMetadata cMetaTagSmallest = tableMetadata.getColumn(ByteBufferUtil.bytes(nameOfSmallestColumnTag));
-                            Cell cTagSmallest = r.getCell(cMetaTagSmallest);
-                            ColumnMetadata cMetaValSmallest = tableMetadata.getColumn(ByteBufferUtil.bytes(nameOfSmallestColumnVal));
-                            Cell cValSmallest = r.getCell(cMetaValSmallest);
                             if (tagRemote.isLarger(largestTag)){
-                                ColumnMetadata cMetaTagLargest = tableMetadata.getColumn(ByteBufferUtil.bytes(nameOfLargestColumnTag));
-                                Cell cTagLargest = r.getCell(cMetaTagLargest);
-                                cTagLargest.setValue(ByteBufferUtil.bytes(TreasTag.serializeHelper(tagRemote)));
-                                ColumnMetadata cMetaValLargest = tableMetadata.getColumn(ByteBufferUtil.bytes(nameOfLargestColumnVal));
-                                Cell cValLargest = r.getCell(cMetaValLargest);
-                                cValLargest.setValue(writtenValue);
-                                cTagSmallest.setValue(ByteBufferUtil.bytes(TreasTag.serializeHelper(largestTag)));
+                                rowBuilder.add(nameOfLargestColumnTag,tagRemote);
+                                rowBuilder.add(nameOfLargestColumnVal,writtenValue);
+                                rowBuilder.add(nameOfSmallestColumnTag,largestTag);
                             }
                             else{
-                                cTagSmallest.setValue(ByteBufferUtil.bytes(TreasTag.serializeHelper(tagRemote)));
+                               rowBuilder.add(nameOfSmallestColumnTag,tagRemote);
                             }
-                            cValSmallest.setValue(emptyValue);
+                            rowBuilder.add(nameOfSmallestColumnVal,emptyValue);
                         }
+
+
                     }
                 }
-
-                message.payload.applyFuture().thenAccept(o -> reply(id, replyTo));
+                Mutation newMutation = mutationBuilder.build();
+                newMutation.applyFuture().thenAccept(o -> reply(id, replyTo));
             }
             reply(id,replyTo);
 //                failed();
