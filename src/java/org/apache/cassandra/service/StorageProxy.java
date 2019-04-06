@@ -1443,11 +1443,13 @@ public class StorageProxy implements StorageProxyMBean
 
         if (localDc != null)
         {
-            int i = 1;
+            int i = 0;
             for (InetAddressAndPort destination : localDc){
                 logger.info("Sending to a foreign server");
                 MessagingService.instance().sendRR(message, destination, responseHandler, true);
+                i++;
             }
+            logger.warn("Sent to {} replicas",i);
         }
 
         if (dcGroups != null)

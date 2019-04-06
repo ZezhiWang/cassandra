@@ -18,32 +18,12 @@
 package org.apache.cassandra.db;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.apache.cassandra.db.partitions.PartitionIterator;
-import org.apache.cassandra.db.partitions.PartitionUpdate;
-import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
-import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
-import org.apache.cassandra.db.rows.Cell;
-import org.apache.cassandra.db.rows.Row;
-import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
-import org.apache.cassandra.schema.ColumnMetadata;
-import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.service.SbqConsts;
-import org.apache.cassandra.service.treas.TreasConfig;
-import org.apache.cassandra.service.treas.TreasTag;
 import org.apache.cassandra.tracing.Tracing;
-import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.Pair;
+
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,157 +60,13 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             replyTo = from;
         }
 
-        try
-        {
-            Pair<Boolean,Mutation> booleanMutationPair = createTreasMutation(message.payload);
-            if(booleanMutationPair.left){
-                booleanMutationPair.right.applyFuture().thenAccept(o -> reply(id, replyTo));
-            }
-
-            reply(id,replyTo);
-//                failed();
+        try{
+            message.payload.applyFuture().thenAccept(o -> reply(id, replyTo));
         }
         catch (WriteTimeoutException wto)
         {
             failed();
         }
-    }
-    public static Pair<Boolean,Mutation> createTreasMutation(Mutation oldMutation){
-        TableMetadata tableMetadata = oldMutation.getPartitionUpdates().iterator().next().metadata();
-        SinglePartitionReadCommand localRead =
-        SinglePartitionReadCommand.fullPartitionRead(
-        tableMetadata,
-        FBUtilities.nowInSeconds(),
-        oldMutation.key()
-        );
-
-        boolean initializedTags = false;
-        TreasTag largestTag = new TreasTag();
-        TreasTag smallestTag = new TreasTag();
-        String nameOfSmallestColumnTag = null;
-        String nameOfLargestColumnTag =null;
-
-
-        try (ReadExecutionController executionController = localRead.executionController();
-             UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController))
-        {
-            // first we have to transform it into a PartitionIterator
-            PartitionIterator pi = UnfilteredPartitionIterators.filter(iterator, localRead.nowInSec());
-            while(pi.hasNext())
-            {
-                RowIterator ri = pi.next();
-                while(ri.hasNext())
-                {
-                    Row r = ri.next();
-                    Map<String,Cell> tagToCell = new HashMap<>();
-                    Set<String> tags = SbqConsts.CONFIG.returnTags();
-                    for(String tag: tags)
-                    {
-                        ColumnMetadata colMetaTagOne = ri.metadata().getColumn(ByteBufferUtil.bytes(tag));
-                        Cell ctag = r.getCell(colMetaTagOne);
-                        if (ctag == null){
-                            logger.info("Tag not initialized");
-                            break;
-                        }
-                        else{
-                            tagToCell.put(tag,ctag);
-                            initializedTags = true;
-                        }
-                    }if(initializedTags){
-                        for(String tagName: SbqConsts.CONFIG.returnTags()){
-                            Cell ctag = tagToCell.get(tagName);
-                            TreasTag tag = TreasTag.deserialize(ctag.value());
-                            if(tag.isLarger(largestTag)){
-                                nameOfLargestColumnTag = tagName;
-                                largestTag=tag;
-                            }
-                            if(smallestTag.isLarger(tag)){
-                                smallestTag = tag;
-                                nameOfSmallestColumnTag = tagName;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // extract the tag information from the mutation
-        TreasTag tagRemote = new TreasTag();
-        Row data = oldMutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
-        ByteBuffer writtenValue = null;
-
-        for (Cell c : data.cells())
-        {
-            if(c.column().name.equals(TreasConfig.CI_TAG)){
-                tagRemote = TreasTag.deserialize(c.value());
-                logger.info("recv remote {}", tagRemote.toString());
-            } else if(c.column().name.equals(TreasConfig.CI_VAL)){
-                writtenValue = c.value();
-            }
-        }
-        ByteBuffer emptyValue = ByteBufferUtil.bytes("");
-        String emptyTagString = TreasTag.serializeHelper(new TreasTag());
-        String remoteTagString = TreasTag.serializeHelper(tagRemote);
-        String largestTagString = TreasTag.serializeHelper(largestTag);
-
-        Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(oldMutation.getKeyspaceName(), oldMutation.key());
-
-        long timeStamp = FBUtilities.timestampMicros();
-        Row.SimpleBuilder rowBuilder = mutationBuilder.update(tableMetadata)
-                                                      .timestamp(timeStamp)
-                                                      .row();
-        if(!initializedTags || tagRemote.isLarger(smallestTag))
-        {
-            List<PartitionUpdate> partitionUpdates = oldMutation.getPartitionUpdates().asList();
-            for (PartitionUpdate partitionUpdate : partitionUpdates)
-            {
-                Iterator<Row> ri = partitionUpdate.iterator();
-                while (ri.hasNext())
-                {
-                    Row r = ri.next();
-
-                    if (!initializedTags)
-                    {
-                        boolean firstValue = true;
-                        for (Map.Entry<String, String> pair : SbqConsts.CONFIG.getTagToIdValSet())
-                        {
-                            String tagName = pair.getKey();
-                            String valueName = pair.getValue();
-                            if (firstValue)
-                            {
-                                rowBuilder.add(tagName, remoteTagString);
-                                rowBuilder.add(valueName, writtenValue);
-                                firstValue = false;
-                            }
-                            else
-                            {
-                                rowBuilder.add(tagName, emptyTagString);
-                                rowBuilder.add(valueName, emptyValue);
-                            }
-                        }
-                    }
-                    else
-                    {
-//                        String nameOfSmallestColumnVal = SbqConsts.CONFIG.getVal(nameOfSmallestColumnTag);
-                        String nameOfLargestColumnVal = SbqConsts.CONFIG.getVal(nameOfLargestColumnTag);
-                        if (tagRemote.isLarger(largestTag))
-                        {
-                            rowBuilder.add(nameOfLargestColumnTag, remoteTagString);
-                            rowBuilder.add(nameOfLargestColumnVal, writtenValue);
-                            rowBuilder.add(nameOfSmallestColumnTag, largestTagString);
-                        }
-                        else
-                        {
-                            rowBuilder.add(nameOfSmallestColumnTag, remoteTagString);
-                        }
-//                        rowBuilder.add(nameOfSmallestColumnVal, emptyValue);
-                    }
-                }
-            }
-            Mutation newMutation = mutationBuilder.build();
-            return new Pair<>(true, newMutation);
-        }
-        return new Pair<>(false,null);
     }
 
     private static void forwardToLocalNodes(Mutation mutation, MessagingService.Verb verb, ForwardToContainer forwardTo, InetAddressAndPort from) throws IOException
