@@ -19,27 +19,20 @@ package org.apache.cassandra.service.reads;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import com.fasterxml.jackson.databind.deser.std.MapEntryDeserializer;
 import com.google.common.base.Preconditions;
 
-import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
-import org.apache.cassandra.service.Erasure;
-import org.apache.cassandra.service.treas.TagVal;
-import org.apache.cassandra.service.treas.TreasConsts;
-import org.apache.cassandra.service.treas.TreasTag;
+import org.apache.cassandra.service.SbqConsts;
+import org.apache.cassandra.service.TagVal;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
@@ -102,13 +95,13 @@ public class DigestResolver extends ResponseResolver
     }
 
 
-    public TagVal getMaxTagVal()
+    public ReadResponse getMaxResponse()
     {
         // check all data responses,
         // extract the one with max z value
 
-        Map<TreasTag,Integer> tagCount = new HashMap<>();
-        Map<TreasTag, List<String>> valCount = new HashMap<>();
+        Map<TagVal,Integer> tvCount = new HashMap<>();
+        Map<TagVal,ReadResponse> tvResp = new HashMap<>();
 
         for (MessageIn<ReadResponse> message : responses)
         {
@@ -118,74 +111,43 @@ public class DigestResolver extends ResponseResolver
             while(pi.hasNext())
             {
                 RowIterator ri = pi.next();
-                Boolean flag = false;
                 while(ri.hasNext())
                 {
-                    Map<String,TreasTag> tagM = new HashMap<>();
+                    TagVal tmpTv = new TagVal(-1,"");
                     for(Cell c : ri.next().cells()) {
-                        for (Map.Entry<String,ColumnIdentifier> ety : TreasConsts.CONFIG.tagToIdentifier.entrySet()){
-                            if (c.column().name.equals(ety.getValue())){
-                                String tagKey = ety.getKey();
-                                TreasTag tmpTag = TreasTag.deserialize(c.value());
-                                tagM.put(tagKey,tmpTag);
-                                int count = tagCount.containsKey(tagKey) ? tagCount.get(tagKey) : 0;
-                                tagCount.put(tmpTag, count + 1);
-
-                                flag = true;
-                                break;
-                            }
-                        }
-
-                        if (flag){
-                            flag = false;
-                            continue;
-                        }
-
-                        for (Map.Entry<String,ColumnIdentifier> ety : TreasConsts.CONFIG.valToIdentifier.entrySet()){
-                            if (c.column().name.equals(ety.getValue())){
-                                String tmpVal = "";
-                                try {
-                                    tmpVal = ByteBufferUtil.string(c.value());
-                                } catch (CharacterCodingException e) {
-                                    logger.info("Unable to cast valOne");
-                                }
-                                if (tmpVal.equals(""))
-                                    break;
-                                TreasTag tmpTag = tagM.get(TreasConsts.CONFIG.valToTag.get(ety.getKey()));
-                                List<String> valList = valCount.containsKey(tmpTag) ? valCount.get(tmpTag) : new ArrayList<>();
-                                valList.add(tmpVal);
-                                valCount.put(tmpTag, valList);
-                                break;
+                        if (c.column().name.equals(SbqConsts.TS_CI)) {
+                            tmpTv.ts = ByteBufferUtil.toInt(c.value());
+                        } else if (c.column().name.equals(SbqConsts.VAL_CI)){
+                            try{
+                                tmpTv.val = ByteBufferUtil.string(c.value());
+                            } catch (CharacterCodingException e){
+                                logger.info("Err getting value: {}",e);
                             }
                         }
                     }
+                    int count = tvCount.containsKey(tmpTv) ? tvCount.get(tmpTv)+1 : 1;
+                    tvCount.put(tmpTv,count);
+                    if(!tvResp.containsKey(tmpTv))
+                        tvResp.put(tmpTv,curResponse);
+
                 }
             }
         }
 
-        TreasTag maxTagStar = new TreasTag();
-        for(TreasTag t : tagCount.keySet()){
-            if (tagCount.get(t) >= TreasConsts.K && t.isLarger(maxTagStar))
-                maxTagStar = t;
+        int maxTs = -1;
+        ReadResponse maxResponse = null;
+        for(TagVal tv : tvCount.keySet()){
+            if (tvCount.get(tv) > SbqConsts.F && tv.ts > maxTs){
+                maxTs = tv.ts;
+                maxResponse = tvResp.get(tv);
+            }
         }
 
-        TreasTag maxTagDec = new TreasTag();
-        for(TreasTag t : valCount.keySet()){
-            if (valCount.get(t).size() >= TreasConsts.L && t.isLarger(maxTagDec))
-                maxTagDec = t;
-        }
-
-
-        String decoded = "";
-        if(!maxTagStar.isLarger(maxTagDec))
-            decoded = Erasure.decode(valCount.get(maxTagDec));
-
-        return new TagVal(maxTagDec,decoded);
+        return maxResponse;
     }
 
-    public TreasTag getMaxTag() {
-        TreasTag maxTag = new TreasTag();
-
+    public int getMaxTs() {
+        int maxTs = -1;
         for (MessageIn<ReadResponse> message : responses) {
             ReadResponse curResponse = message.payload;
             assert !curResponse.isDigestResponse();
@@ -193,22 +155,20 @@ public class DigestResolver extends ResponseResolver
             while (pi.hasNext()) {
                 RowIterator ri = pi.next();
                 while (ri.hasNext()) {
-                    TreasTag curTag = new TreasTag();
+                    int curTs = -1;
                     for (Cell c : ri.next().cells()) {
-                        for(ColumnIdentifier ci : TreasConsts.CONFIG.tagIdentifiers()){
-                            if(c.column().name.equals(ci)){
-                                TreasTag tmpTag = TreasTag.deserialize(c.value());
-                                curTag = tmpTag.isLarger(curTag) ? tmpTag : curTag;
-                            }
+                        if(c.column().name.equals(SbqConsts.TS_CI)){
+                            curTs = ByteBufferUtil.toInt(c.value());
+                            break;
                         }
                     }
-                    if (curTag.isLarger(maxTag)) {
-                        maxTag = curTag;
+                    if (curTs > maxTs) {
+                        maxTs = curTs;
                     }
                 }
             }
         }
-        return maxTag;
+        return maxTs;
     }
 
     public boolean isDataPresent()

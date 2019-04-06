@@ -40,8 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.service.treas.TreasConfig;
-import org.apache.cassandra.service.treas.TreasConsts;
+import org.apache.cassandra.service.SbqConsts;
 import org.yaml.snakeyaml.TypeDescription;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
@@ -61,7 +60,7 @@ public class YamlConfigurationLoader implements ConfigurationLoader
      */
     private static URL getStorageConfigURL() throws ConfigurationException
     {
-        TreasConsts.init();
+        SbqConsts.init();
         String configUrl = System.getProperty("cassandra.config");
         if (configUrl == null)
             configUrl = DEFAULT_CONFIGURATION;

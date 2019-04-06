@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.Iterables;
-import org.apache.cassandra.service.treas.TreasConsts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +47,8 @@ public enum ConsistencyLevel
     EACH_QUORUM (7),
     SERIAL      (8),
     LOCAL_SERIAL(9),
-    LOCAL_ONE   (10, true);
+    LOCAL_ONE   (10, true),
+    NONE        (11);
 
     private static final Logger logger = LoggerFactory.getLogger(ConsistencyLevel.class);
 
@@ -93,11 +93,6 @@ public enum ConsistencyLevel
         return (keyspace.getReplicationStrategy().getReplicationFactor() / 2) + 1;
     }
 
-    private int treasFor(Keyspace keyspace)
-    {
-        return ((keyspace.getReplicationStrategy().getReplicationFactor()+ TreasConsts.K) / 2) + 1;
-    }
-
     private int localQuorumFor(Keyspace keyspace, String dc)
     {
         return (keyspace.getReplicationStrategy() instanceof NetworkTopologyStrategy)
@@ -109,8 +104,8 @@ public enum ConsistencyLevel
     {
         switch (this)
         {
-            case TREAS:
-                return treasFor(keyspace);
+            case NONE:
+                return 0;
             case ONE:
             case LOCAL_ONE:
                 return 1;

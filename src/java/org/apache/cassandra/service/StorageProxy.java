@@ -19,7 +19,6 @@ package org.apache.cassandra.service;
 
 import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
@@ -35,8 +34,6 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.collect.*;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.Uninterruptibles;
-
-import org.apache.cassandra.service.treas.TreasConfig;
 import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
@@ -47,10 +44,7 @@ import org.apache.cassandra.batchlog.Batch;
 import org.apache.cassandra.batchlog.BatchlogManager;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
-import org.apache.cassandra.db.rows.Cell;
-import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.schema.ColumnMetadata;
-import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.service.reads.AbstractReadExecutor;
 import org.apache.cassandra.service.reads.DataResolver;
 import org.apache.cassandra.service.reads.ReadCallback;
@@ -83,9 +77,6 @@ import org.apache.cassandra.service.paxos.PrepareVerbHandler;
 import org.apache.cassandra.service.paxos.ProposeCallback;
 import org.apache.cassandra.service.paxos.ProposeVerbHandler;
 import org.apache.cassandra.net.MessagingService.Verb;
-import org.apache.cassandra.service.treas.TagVal;
-import org.apache.cassandra.service.treas.TreasConsts;
-import org.apache.cassandra.service.treas.TreasTag;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.triggers.TriggerExecutor;
 import org.apache.cassandra.utils.*;
@@ -695,9 +686,9 @@ public class StorageProxy implements StorageProxyMBean
     {
         Tracing.trace("Determining replicas for mutation");
 
-        // Treas get
-        // create an read command to fetch the z value corresponding to the key
-        List<SinglePartitionReadCommand> tagReadList = new ArrayList<>();
+        // get timestamp
+        // create an read command to fetch the timestamp corresponding to the key
+        List<SinglePartitionReadCommand> tsReadList = new ArrayList<>();
         for (IMutation mutation : mutations)
         {
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
@@ -709,12 +700,12 @@ public class StorageProxy implements StorageProxyMBean
                                                         nowInSec,
                                                         decoratedKey
                                                         );
-            tagReadList.add(tagRead);
+            tsReadList.add(tagRead);
         }
 
-        TreasTag maxTag = fetchMaxTag(tagReadList, consistency_level, System.nanoTime());
+        int maxTs = fetchMaxTag(tsReadList, consistency_level, System.nanoTime());
 
-        // Treas put
+        // put
         List<IMutation> newMutations = new ArrayList<>();
 
         for (IMutation mutation : mutations)
@@ -724,10 +715,13 @@ public class StorageProxy implements StorageProxyMBean
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
             long timeStamp = FBUtilities.timestampMicros();
 
+            int newMax = Math.max(maxTs,SbqConsts.getLocalMaxTs())+1;
+            SbqConsts.setLocalMaxTs(newMax);
+
             mutationBuilder.update(tableMetadata)
                     .timestamp(timeStamp)
                     .row()
-                    .add(TreasConfig.ORIGINAL_TAG, TreasTag.serializeHelper(maxTag.nextTag()));
+                    .add(SbqConsts.TS, newMax);
 
             Mutation tagMutation = mutationBuilder.build();
 
@@ -740,7 +734,7 @@ public class StorageProxy implements StorageProxyMBean
             newMutations.add(newMutation);
         }
 
-        mutateDoWrite(newMutations, consistency_level, System.nanoTime());
+        mutateDoWrite(newMutations, ConsistencyLevel.NONE, System.nanoTime());
     }
 
     /**
@@ -1437,41 +1431,6 @@ public class StorageProxy implements StorageProxyMBean
             }
         }
 
-        List<PartitionUpdate> partitionUpdates = mutation.getPartitionUpdates().asList();
-        List<String> dataSplits = null;
-        int nReplications = targetsSize;
-        for (PartitionUpdate partitionUpdate : partitionUpdates)
-        {
-            Iterator<Row> rowIterator = partitionUpdate.iterator();
-            Map<Integer, Map<Integer, List<String>>> partitionChages = new HashMap<>();
-            while (rowIterator.hasNext())
-            {
-                Row row = rowIterator.next();
-                int cellId = 0;
-                for (Cell c : row.cells())
-                {
-                    logger.info(c.column().name.toString());
-
-                    if (c.column().name.equals(TreasConfig.CI_VAL))
-                    {
-                        logger.info("In data cell");
-                        try
-                        {
-                            String data = ByteBufferUtil.string(c.value());
-                            dataSplits = Erasure.encode(data,nReplications);
-                        }
-                        catch (CharacterCodingException e)
-                        {
-                            logger.error("Unable to parse string from bytes");
-                        }
-                    }
-                }
-            }
-        }
-        List<MessageOut<Mutation>> replications = createDataPartitionMessages(dataSplits, mutation, nReplications);
-        Mutation localMutation = replications.get(0).payload;
-
-
         MessagingService.instance().applyBackPressure(backPressureHosts, responseHandler.currentTimeout());
 
         if (endpointsToHint != null)
@@ -1479,19 +1438,15 @@ public class StorageProxy implements StorageProxyMBean
 
         if (insertLocal){
             logger.info("Performing local changes");
-            Pair<Boolean,Mutation> booleanMutationPair = MutationVerbHandler.createTreasMutation(localMutation);
-            if(booleanMutationPair.left){
-                performLocally(stage, Optional.of(booleanMutationPair.right), booleanMutationPair.right::apply, responseHandler);
-            }
+            performLocally(stage, Optional.of(mutation), mutation::apply, responseHandler);
         }
 
         if (localDc != null)
         {
             int i = 1;
             for (InetAddressAndPort destination : localDc){
-                MessagingService.instance().sendRR(message, destination, responseHandler, true);
                 logger.info("Sending to a foreign server");
-                MessagingService.instance().sendRR(replications.get(i++), destination, responseHandler, true);
+                MessagingService.instance().sendRR(message, destination, responseHandler, true);
             }
         }
 
@@ -1504,53 +1459,6 @@ public class StorageProxy implements StorageProxyMBean
         }
     }
 
-    private static List<MessageOut<Mutation>> createDataPartitionMessages(List<String> dataSplits,
-                                                                          Mutation mutation, int nReplications)
-    {
-
-        List<MessageOut<Mutation>> dataPartitionMessages = new ArrayList<>();
-        for (int r = 0; r < nReplications; r++)
-        {
-            MessageOut<Mutation> dataPartitionMessage = replicateMessage(mutation);
-            List<PartitionUpdate> partitionUpdates = dataPartitionMessage.payload.getPartitionUpdates().asList();
-            for (PartitionUpdate partitionUpdate : partitionUpdates)
-            {
-                Iterator<Row> rowIterator = partitionUpdate.iterator();
-                while (rowIterator.hasNext())
-                {
-                    Row row = rowIterator.next();
-                    for (Cell c : row.cells())
-
-                    {
-                        if (c.column().name.equals(TreasConfig.CI_VAL))
-                        {
-
-                            String newValue = dataSplits.get(r);
-                            c.setValue(ByteBufferUtil.bytes(newValue));
-                        }
-                    }
-                }
-            }
-            dataPartitionMessages.add(dataPartitionMessage);
-        }
-        return dataPartitionMessages;
-    }
-
-    private static MessageOut<Mutation> replicateMessage(Mutation mutation){
-
-        PartitionUpdate update = mutation.getPartitionUpdates().iterator().next();
-        long timeStamp = FBUtilities.timestampMicros();
-        ImmutableMap.Builder<TableId, PartitionUpdate> modifications = new ImmutableMap.Builder<>();
-        for (PartitionUpdate partitionUpdate : mutation.getPartitionUpdates()){
-            int version = 1;
-            ByteBuffer byteBuffer = PartitionUpdate.toBytes(partitionUpdate, 1);
-            PartitionUpdate newPartitionUpdate = PartitionUpdate.fromBytes(byteBuffer, version);
-            modifications.put(newPartitionUpdate.metadata().id, newPartitionUpdate);
-        }
-
-        Mutation newMutation = new Mutation(update.metadata().keyspace, update.partitionKey(), modifications.build(), timeStamp);
-        return newMutation.createMessage();
-    }
     private static void checkHintOverload(InetAddressAndPort destination)
     {
         // avoid OOMing due to excess hints.  we need to do this check even for "live" nodes, since we can
@@ -1958,9 +1866,9 @@ public class StorageProxy implements StorageProxyMBean
         // the original fetchRows will be used, this is a workaround
         // to the initialization failure issue
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
-        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(TreasConfig.ORIGINAL_TAG));
+        ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(SbqConsts.TS));
         if(tagMetadata != null)
-            return fetchRowsTreas(commands, consistencyLevel);
+            return fetchRowsSbq(commands, consistencyLevel);
 
         int cmdCount = commands.size();
 
@@ -2006,7 +1914,7 @@ public class StorageProxy implements StorageProxyMBean
         return PartitionIterators.concat(results);
     }
 
-    private static PartitionIterator fetchRowsTreas(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel)
+    private static PartitionIterator fetchRowsSbq(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel)
             throws UnavailableException, ReadFailureException, ReadTimeoutException {
         SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(
                 commands.get(0).metadata(),
@@ -2014,45 +1922,29 @@ public class StorageProxy implements StorageProxyMBean
                 commands.get(0).partitionKey()
             );
 
-        ResponseAndTagVal tagValueResult = fetchTagValue(command, consistencyLevel, System.nanoTime());
-        Mutation.SimpleBuilder mutationBuilder = Mutation.simpleBuilder(command.metadata().keyspace, command.partitionKey());
+        ReadResponse rr = fetchTagValue(command, consistencyLevel, System.nanoTime());
 
-        mutationBuilder.update(command.metadata())
-                .timestamp(FBUtilities.timestampMicros()).row()
-                .add(TreasConfig.ORIGINAL_TAG, TreasTag.serializeHelper(tagValueResult.tv.tag))
-                .add(TreasConfig.ORIGINAL_VAl, tagValueResult.tv.val);
-
-        Mutation tvMutation = mutationBuilder.build();
-
-        List<Mutation> mutationList = new ArrayList<>();
-        mutationList.add(tvMutation);
-        mutateDoWrite(mutationList, consistencyLevel, System.nanoTime());
-        return prepIterator(commands, tagValueResult.resp, tagValueResult.tv);
+        return UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec());
     }
 
-    private static ResponseAndTagVal fetchTagValue(SinglePartitionReadCommand command, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static ReadResponse fetchTagValue(SinglePartitionReadCommand command, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
     throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
         AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(command, consistencyLevel, queryStartNanoTime);
-        read.executeAsyncTreas();
+        read.executeAsyncSbq();
         read.maybeTryAdditionalReplicas();
-        read.awaitResponsesTreas();
-        return new ResponseAndTagVal(read.getResult(),read.getTagVal());
+        read.awaitResponsesSbq();
+        return read.getResult();
     }
 
-    private static TreasTag fetchMaxTag(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static int fetchMaxTag(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
             throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
         AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(commands.get(0), consistencyLevel, queryStartNanoTime);
-        read.executeAsyncTreas();
+        read.executeAsyncSbq();
         read.maybeTryAdditionalReplicas();
-        read.awaitTagTreas();
-        return read.getTagVal().tag;
-    }
-
-    private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, ReadResponse response, TagVal tv) {
-        SinglePartitionReadCommand command = commands.get(0);
-        return UnfilteredPartitionIterators.filter(response.makeIterator(command, tv), command.nowInSec());
+        read.awaitTs();
+        return read.getTs();
     }
 
     public static class LocalReadRunnable extends DroppableRunnable

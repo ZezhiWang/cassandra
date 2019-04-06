@@ -16,21 +16,28 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.service.treas;
+package org.apache.cassandra.service;
 
-import org.apache.cassandra.service.treas.TreasTag;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 
-public class TagVal {
-    public TreasTag tag;
-    public String val;
+public class SbqConsts {
 
-    public TagVal(){
-        this.tag = new TreasTag();
-        this.val = "";
+    public static String TS = "ts";
+    public static ColumnIdentifier TS_CI = new ColumnIdentifier(TS,true);
+
+    public static String VAL = "field0";
+    public static ColumnIdentifier VAL_CI = new ColumnIdentifier(VAL,true);
+
+    public static int F = 1;
+
+    public static int MAX_TS = -1;
+
+    public static int getLocalMaxTs(){
+        return MAX_TS;
     }
 
-    public TagVal(TreasTag t, String v){
-        this.tag = t;
-        this.val = v;
+    public static void setLocalMaxTs(int newTs){
+        MAX_TS = newTs;
     }
+
 }

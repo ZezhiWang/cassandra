@@ -22,8 +22,6 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
-import org.apache.cassandra.service.treas.TagVal;
-import org.apache.cassandra.service.treas.TreasTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,7 +68,7 @@ public abstract class AbstractReadExecutor
     protected final ColumnFamilyStore cfs;
     protected final long queryStartNanoTime;
     protected volatile ReadResponse result = null;
-    protected volatile TagVal tagVal = null;
+    protected volatile int ts = -1;
 
     AbstractReadExecutor(Keyspace keyspace, ColumnFamilyStore cfs, ReadCommand command, ConsistencyLevel consistency, List<InetAddressAndPort> targetReplicas, long queryStartNanoTime)
     {
@@ -162,7 +160,7 @@ public abstract class AbstractReadExecutor
      */
     public abstract void executeAsync();
 
-    public void executeAsyncTreas()
+    public void executeAsyncSbq()
     {
         // we don't need digest read for ABD,
         // all read requests issued are data requests
@@ -381,16 +379,10 @@ public abstract class AbstractReadExecutor
         this.result = result;
     }
 
-    public void setTagVal(TagVal tv)
+    public void setTs(int t)
     {
-        Preconditions.checkState(this.tagVal == null, "tagVal can only be set once");
-        this.tagVal = tv;
-    }
-
-    public void setTagVal(TreasTag t)
-    {
-        Preconditions.checkState(this.tagVal == null, "tagVal can only be set once");
-        this.tagVal = new TagVal(t,"");
+        Preconditions.checkState(this.ts == -1, "tagVal can only be set once");
+        this.ts = t;
     }
 
     /**
@@ -426,7 +418,7 @@ public abstract class AbstractReadExecutor
         }
     }
 
-    public void awaitResponsesTreas() throws ReadTimeoutException
+    public void awaitResponsesSbq() throws ReadTimeoutException
     {
         try
         {
@@ -447,11 +439,14 @@ public abstract class AbstractReadExecutor
         // when we get here, the consistency level must have been satisfied
         // this function is implemented in digest resolver because the data
         // responses are in it
-        setTagVal(digestResolver.getMaxTagVal());
-        setResult(digestResolver.getReadResponse());
+        ReadResponse maxResponse = digestResolver.getMaxResponse();
+        if(maxResponse != null)
+            setResult(maxResponse);
+        else
+            setResult(digestResolver.getReadResponse());
     }
 
-    public void awaitTagTreas() throws ReadTimeoutException
+    public void awaitTs() throws ReadTimeoutException
     {
         try {
             handler.awaitResults();
@@ -463,12 +458,12 @@ public abstract class AbstractReadExecutor
             }
         }
 
-        TreasTag tag = digestResolver.getMaxTag();
+        int ts = digestResolver.getMaxTs();
 
-        if(tag != null){
-            setTagVal(tag);
+        if(ts > -1){
+            setTs(ts);
         } else {
-            setTagVal(new TagVal());
+            setTs(0);
         }
     }
 
@@ -503,8 +498,8 @@ public abstract class AbstractReadExecutor
         return result;
     }
 
-    public TagVal getTagVal() throws ReadFailureException, ReadTimeoutException
+    public int getTs() throws ReadFailureException, ReadTimeoutException
     {
-        return tagVal != null ? tagVal : new TagVal();
+        return ts != -1 ? ts : 0;
     }
 }

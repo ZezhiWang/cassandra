@@ -16,19 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.service.treas;
+package org.apache.cassandra.service;
 
-public class TreasConsts {
+public class TagVal {
+    public int ts;
+    public String val;
 
-    public static int K = 5;
-    public static int DELTA = 2;
-    public static int L = K % (DELTA+1) == 0 ? K/(DELTA+1) :K/(DELTA+1)+1;
-
-    public static TreasConfig CONFIG;
-
-    public static void  init(){
-        CONFIG = new TreasConfig(DELTA);
+    public TagVal(int t, String v){
+        this.ts = t;
+        this.val = v;
     }
-
-
 }

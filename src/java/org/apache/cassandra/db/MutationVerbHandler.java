@@ -37,8 +37,8 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.SbqConsts;
 import org.apache.cassandra.service.treas.TreasConfig;
-import org.apache.cassandra.service.treas.TreasConsts;
 import org.apache.cassandra.service.treas.TreasTag;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -123,7 +123,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                 {
                     Row r = ri.next();
                     Map<String,Cell> tagToCell = new HashMap<>();
-                    Set<String> tags = TreasConsts.CONFIG.returnTags();
+                    Set<String> tags = SbqConsts.CONFIG.returnTags();
                     for(String tag: tags)
                     {
                         ColumnMetadata colMetaTagOne = ri.metadata().getColumn(ByteBufferUtil.bytes(tag));
@@ -137,7 +137,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                             initializedTags = true;
                         }
                     }if(initializedTags){
-                        for(String tagName: TreasConsts.CONFIG.returnTags()){
+                        for(String tagName: SbqConsts.CONFIG.returnTags()){
                             Cell ctag = tagToCell.get(tagName);
                             TreasTag tag = TreasTag.deserialize(ctag.value());
                             if(tag.isLarger(largestTag)){
@@ -192,7 +192,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     if (!initializedTags)
                     {
                         boolean firstValue = true;
-                        for (Map.Entry<String, String> pair : TreasConsts.CONFIG.getTagToIdValSet())
+                        for (Map.Entry<String, String> pair : SbqConsts.CONFIG.getTagToIdValSet())
                         {
                             String tagName = pair.getKey();
                             String valueName = pair.getValue();
@@ -211,8 +211,8 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     }
                     else
                     {
-//                        String nameOfSmallestColumnVal = TreasConsts.CONFIG.getVal(nameOfSmallestColumnTag);
-                        String nameOfLargestColumnVal = TreasConsts.CONFIG.getVal(nameOfLargestColumnTag);
+//                        String nameOfSmallestColumnVal = SbqConsts.CONFIG.getVal(nameOfSmallestColumnTag);
+                        String nameOfLargestColumnVal = SbqConsts.CONFIG.getVal(nameOfLargestColumnTag);
                         if (tagRemote.isLarger(largestTag))
                         {
                             rowBuilder.add(nameOfLargestColumnTag, remoteTagString);
