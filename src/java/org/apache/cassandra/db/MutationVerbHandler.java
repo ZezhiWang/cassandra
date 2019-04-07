@@ -59,85 +59,68 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         // Check if there were any forwarding headers in this message
         InetAddressAndPort from = (InetAddressAndPort)message.parameters.get(ParameterType.FORWARD_FROM);
         InetAddressAndPort replyTo;
-        if (from == null)
-        {
+        if (from == null) {
             replyTo = message.from;
             ForwardToContainer forwardTo = (ForwardToContainer)message.parameters.get(ParameterType.FORWARD_TO);
             if (forwardTo != null)
                 forwardToLocalNodes(message.payload, message.verb, forwardTo, message.from);
-        }
-        else
-        {
+        } else {
             replyTo = from;
         }
 
-        try
-        {
-            // first we have to create a read request out of the current mutation
-            SinglePartitionReadCommand localRead =
-            SinglePartitionReadCommand.fullPartitionRead(
-            message.payload.getPartitionUpdates().iterator().next().metadata(),
-            FBUtilities.nowInSeconds(),
-            message.payload.key()
-            );
+        // comparing the tag and the one in mutation, act accordingly
+        if (canUpdate(message.payload)) {
+            try {
+                message.payload.applyFuture().thenAccept(o -> reply(id, replyTo));
+            } catch (WriteTimeoutException wto) {
+                failed();
+            }
+        } else {
+            reply(id,replyTo);
+        }
+    }
 
-            // execute the read request locally to obtain the tag of the key
-            // and extract tag information from the local read
-            ABDTag tagLocal = new ABDTag();
-            try (ReadExecutionController executionController = localRead.executionController();
-                 UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController))
-            {
-                // first we have to transform it into a PartitionIterator
-                PartitionIterator pi = UnfilteredPartitionIterators.filter(iterator, localRead.nowInSec());
-                while(pi.hasNext())
-                {
-                    RowIterator ri = pi.next();
-                    while(ri.hasNext())
-                    {
-                        Row r = ri.next();
-                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
-                        Cell c = r.getCell(colMeta);
-                        if (c == null) {
-                            logger.error(r.toString());
-                        }else {
-                            tagLocal = ABDTag.deserialize(c.value());
-                        }
+    public static boolean canUpdate(IMutation mutation){
+        // first we have to create a read request out of the current mutation
+        SinglePartitionReadCommand localRead = SinglePartitionReadCommand.tagRead(
+                mutation.getPartitionUpdates().iterator().next().metadata(),
+                FBUtilities.nowInSeconds(),
+                mutation.key());
+
+        // execute the read request locally to obtain the tag of the key
+        // and extract tag information from the local read
+        ABDTag tagLocal = new ABDTag();
+        try (ReadExecutionController executionController = localRead.executionController();
+             UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController)) {
+            // first we have to transform it into a PartitionIterator
+            PartitionIterator pi = UnfilteredPartitionIterators.filter(iterator, localRead.nowInSec());
+            while(pi.hasNext()) {
+                RowIterator ri = pi.next();
+                while(ri.hasNext()) {
+                    Row r = ri.next();
+                    ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
+                    Cell c = r.getCell(colMeta);
+                    if (c == null) {
+                        logger.error(r.toString());
+                    }else {
+                        tagLocal = ABDTag.deserialize(c.value());
                     }
                 }
             }
+        }
 
-            // extract the tag information from the mutation
-            ABDTag tagRemote = new ABDTag();
-            Row data = message.payload.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
-            ColumnIdentifier ci = new ColumnIdentifier(ABDColumns.TAG,true);
+        // extract the tag information from the mutation
+        ABDTag tagRemote = new ABDTag();
+        Row data = mutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
+        ColumnIdentifier ci = new ColumnIdentifier(ABDColumns.TAG,true);
 
-            for (Cell c : data.cells())
-            {
-
-                if(c.column().name.equals(ci))
-                {
-                    tagRemote = ABDTag.deserialize(c.value());
-                    logger.info("recv remote {}", tagRemote.toString());
-                }
-            }
-
-            //System.out.printf("local z:%d %s request z:%d %s\n", z_value_local, writer_id_local, z_value_request, writer_id_request);
-
-            // comparing the tag and the one in mutation, act accordingly
-            if (tagRemote.isLarger(tagLocal))
-            {
-                message.payload.applyFuture().thenAccept(o -> reply(id, replyTo));
-            }
-            else
-            {
-                reply(id,replyTo);
-//                failed();
+        for (Cell c : data.cells()) {
+            if(c.column().name.equals(ci)) {
+                tagRemote = ABDTag.deserialize(c.value());
+                break;
             }
         }
-        catch (WriteTimeoutException wto)
-        {
-            failed();
-        }
+        return tagRemote.isLarger(tagLocal);
     }
 
     private static void forwardToLocalNodes(Mutation mutation, MessagingService.Verb verb, ForwardToContainer forwardTo, InetAddressAndPort from) throws IOException

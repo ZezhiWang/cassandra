@@ -47,13 +47,17 @@ import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.ABDColumns;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.SearchIterator;
 import org.apache.cassandra.utils.btree.BTreeSet;
+
+import static java.util.Comparator.naturalOrder;
 
 /**
  * A read command that selects a (part of a) single partition.
@@ -214,6 +218,20 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
     {
         return create(metadata, nowInSec, key, Slices.with(metadata.comparator, slice));
     }
+
+    public static  SinglePartitionReadCommand tagRead(TableMetadata metadata, int nowInSec, DecoratedKey key){
+        ClusteringIndexSliceFilter filter = new ClusteringIndexSliceFilter(Slices.ALL, false);
+
+        ColumnMetadata c = metadata.getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
+        BTreeSet.Builder<ColumnMetadata> tagCol = BTreeSet.builder(naturalOrder());
+        tagCol.add(c);
+        RegularAndStaticColumns cols = new RegularAndStaticColumns(Columns.NONE, Columns.from(tagCol.build()));
+
+        ColumnFilter column_filter = ColumnFilter.selection(metadata, cols);
+
+        return create(metadata, nowInSec, column_filter, RowFilter.NONE, DataLimits.NONE, key, filter);
+    }
+
 
     /**
      * Creates a new single partition slice command for the provided slices.

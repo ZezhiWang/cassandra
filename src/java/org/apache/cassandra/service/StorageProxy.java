@@ -36,6 +36,7 @@ import com.google.common.collect.*;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.Uninterruptibles;
 
+import org.apache.cassandra.db.filter.*;
 import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
@@ -58,8 +59,6 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.filter.DataLimits;
-import org.apache.cassandra.db.filter.TombstoneOverwhelmingException;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.db.view.ViewUtils;
@@ -704,7 +703,13 @@ public class StorageProxy implements StorageProxyMBean
             int nowInSec = FBUtilities.nowInSeconds();
             DecoratedKey  decoratedKey =  mutation.key();
 
-            SinglePartitionReadCommand tagRead = SinglePartitionReadCommand.fullPartitionRead(
+//            SinglePartitionReadCommand tagRead = SinglePartitionReadCommand.fullPartitionRead(
+//                                                        tableMetadata,
+//                                                        nowInSec,
+//                                                        decoratedKey
+//                                                        );
+
+            SinglePartitionReadCommand tagRead = SinglePartitionReadCommand.tagRead(
                                                         tableMetadata,
                                                         nowInSec,
                                                         decoratedKey
@@ -713,13 +718,12 @@ public class StorageProxy implements StorageProxyMBean
         }
 
         HashMap<String, ABDTag> maxTsMap = new HashMap<>();
-        List<ReadResponse> readList = fetchTagValue(tagReadList, consistency_level, System.nanoTime());
+        List<ReadResponse> readList = fetchTagValue(tagReadList, System.nanoTime());
         PartitionIterator zValueReadResult = prepIterator(tagReadList, readList);
 
         while(zValueReadResult.hasNext())
         {
             RowIterator ri = zValueReadResult.next();
-
             ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
 
             while(ri.hasNext())
@@ -765,7 +769,7 @@ public class StorageProxy implements StorageProxyMBean
             newMutations.add(newMutation);
         }
 
-        mutateDoWrite(newMutations, consistency_level, System.nanoTime());
+        mutateDoWrite(newMutations, ConsistencyLevel.QUORUM, System.nanoTime());
     }
 
     /**
@@ -1458,8 +1462,11 @@ public class StorageProxy implements StorageProxyMBean
         if (endpointsToHint != null)
             submitHint(mutation, endpointsToHint, responseHandler);
 
-        if (insertLocal)
-            performLocally(stage, Optional.of(mutation), mutation::apply, responseHandler);
+        if (insertLocal) {
+            if (MutationVerbHandler.canUpdate(mutation)){
+                performLocally(stage, Optional.of(mutation), mutation::apply, responseHandler);
+            }
+        }
 
         if (localDc != null)
         {
@@ -1883,7 +1890,7 @@ public class StorageProxy implements StorageProxyMBean
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
         ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
         if(tagMetadata != null)
-            return fetchRowsAbd(commands, consistencyLevel);
+            return fetchRowsAbd(commands);
 
         int cmdCount = commands.size();
 
@@ -1929,7 +1936,7 @@ public class StorageProxy implements StorageProxyMBean
         return PartitionIterators.concat(results);
     }
 
-    private static PartitionIterator fetchRowsAbd(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel)
+    private static PartitionIterator fetchRowsAbd(List<SinglePartitionReadCommand> commands)
             throws UnavailableException, ReadFailureException, ReadTimeoutException {
         // first we have to create a full partition read based on the
         // incoming read command to cover both value and z_value column
@@ -1948,7 +1955,7 @@ public class StorageProxy implements StorageProxyMBean
         // execute the tag value read, the result will be the
         // tag value pair with the largest tag
         
-        List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
+        List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, System.nanoTime());
         PartitionIterator pi = prepIteratorNeedUpd(commands, tagValueResult);
         if (pi == null)
             return prepIterator(commands, tagValueResult);
@@ -1994,13 +2001,13 @@ public class StorageProxy implements StorageProxyMBean
 
 
             // then we will have to perform the mutatation we've just generated
-            mutateDoWrite(mutationList, consistencyLevel, System.nanoTime());
+            mutateDoWrite(mutationList, ConsistencyLevel.QUORUM, System.nanoTime());
         }
 
         return prepIterator(commands, tagValueResult);
     }
 
-    private static List<ReadResponse> fetchTagValue(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static List<ReadResponse> fetchTagValue(List<SinglePartitionReadCommand> commands, long queryStartNanoTime)
     throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
         int cmdCount = commands.size();
@@ -2009,7 +2016,7 @@ public class StorageProxy implements StorageProxyMBean
 
         for (int i=0; i<cmdCount; i++)
         {
-            reads[i] = AbstractReadExecutor.getReadExecutor(commands.get(i), consistencyLevel, queryStartNanoTime);
+            reads[i] = AbstractReadExecutor.getReadExecutor(commands.get(i), ConsistencyLevel.QUORUM, queryStartNanoTime);
         }
 
         for (int i=0; i<cmdCount; i++)
@@ -2017,7 +2024,6 @@ public class StorageProxy implements StorageProxyMBean
             reads[i].executeAsyncAbd();
         }
 
-        // todo: this is not needed
         for (int i=0; i<cmdCount; i++)
         {
             reads[i].maybeTryAdditionalReplicas();
@@ -2027,18 +2033,6 @@ public class StorageProxy implements StorageProxyMBean
         {
             reads[i].awaitResponsesAbd();
         }
-
-        // todo: this is not needed
-//        for (int i=0; i<cmdCount; i++)
-//        {
-//            reads[i].maybeRepairAdditionalReplicas();
-//        }
-
-        // todo: this is not needed
-//        for (int i=0; i<cmdCount; i++)
-//        {
-//            reads[i].awaitReadRepair();
-//        }
     
         List<ReadResponse> results = new ArrayList<>();
 
