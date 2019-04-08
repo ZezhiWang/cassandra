@@ -60,7 +60,6 @@ public class YamlConfigurationLoader implements ConfigurationLoader
      */
     private static URL getStorageConfigURL() throws ConfigurationException
     {
-        SbqConsts.init();
         String configUrl = System.getProperty("cassandra.config");
         if (configUrl == null)
             configUrl = DEFAULT_CONFIGURATION;

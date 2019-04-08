@@ -703,7 +703,7 @@ public class StorageProxy implements StorageProxyMBean
             tsReadList.add(tagRead);
         }
 
-        int maxTs = fetchMaxTag(tsReadList, consistency_level, System.nanoTime());
+        int maxTs = fetchMaxTag(tsReadList, System.nanoTime());
 
         // put
         List<IMutation> newMutations = new ArrayList<>();
@@ -1870,7 +1870,7 @@ public class StorageProxy implements StorageProxyMBean
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
         ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes(SbqConsts.TS));
         if(tagMetadata != null)
-            return fetchRowsSbq(commands, consistencyLevel);
+            return fetchRowsSbq(commands);
 
         int cmdCount = commands.size();
 
@@ -1916,7 +1916,7 @@ public class StorageProxy implements StorageProxyMBean
         return PartitionIterators.concat(results);
     }
 
-    private static PartitionIterator fetchRowsSbq(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel)
+    private static PartitionIterator fetchRowsSbq(List<SinglePartitionReadCommand> commands)
             throws UnavailableException, ReadFailureException, ReadTimeoutException {
         SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(
                 commands.get(0).metadata(),
@@ -1924,25 +1924,25 @@ public class StorageProxy implements StorageProxyMBean
                 commands.get(0).partitionKey()
             );
 
-        ReadResponse rr = fetchTagValue(command, consistencyLevel, System.nanoTime());
+        ReadResponse rr = fetchTagValue(command, System.nanoTime());
 
         return UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec());
     }
 
-    private static ReadResponse fetchTagValue(SinglePartitionReadCommand command, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static ReadResponse fetchTagValue(SinglePartitionReadCommand command, long queryStartNanoTime)
     throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
-        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(command, consistencyLevel, queryStartNanoTime);
+        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(command, ConsistencyLevel.SBQ, queryStartNanoTime);
         read.executeAsyncSbq();
         read.maybeTryAdditionalReplicas();
         read.awaitResponsesSbq();
         return read.getResult();
     }
 
-    private static int fetchMaxTag(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static int fetchMaxTag(List<SinglePartitionReadCommand> commands, long queryStartNanoTime)
             throws UnavailableException, ReadFailureException, ReadTimeoutException
     {
-        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(commands.get(0), consistencyLevel, queryStartNanoTime);
+        AbstractReadExecutor read = AbstractReadExecutor.getReadExecutor(commands.get(0), ConsistencyLevel.SBQ, queryStartNanoTime);
         read.executeAsyncSbq();
         read.maybeTryAdditionalReplicas();
         read.awaitTs();

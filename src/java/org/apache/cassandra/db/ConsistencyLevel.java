@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.Iterables;
+import org.apache.cassandra.service.SbqConsts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +49,8 @@ public enum ConsistencyLevel
     SERIAL      (8),
     LOCAL_SERIAL(9),
     LOCAL_ONE   (10, true),
-    NONE        (11);
+    NONE        (11),
+    SBQ         (12);
 
     private static final Logger logger = LoggerFactory.getLogger(ConsistencyLevel.class);
 
@@ -93,6 +95,12 @@ public enum ConsistencyLevel
         return (keyspace.getReplicationStrategy().getReplicationFactor() / 2) + 1;
     }
 
+    private int sbqFor(Keyspace keyspace)
+    {
+        int n = keyspace.getReplicationStrategy().getReplicationFactor();
+        return n % 2 == 0 ? n/2+SbqConsts.F+1 : n/2+SbqConsts.F+2;
+    }
+
     private int localQuorumFor(Keyspace keyspace, String dc)
     {
         return (keyspace.getReplicationStrategy() instanceof NetworkTopologyStrategy)
@@ -104,6 +112,8 @@ public enum ConsistencyLevel
     {
         switch (this)
         {
+            case SBQ:
+                return sbqFor(keyspace);
             case NONE:
                 return 0;
             case ONE:
