@@ -605,7 +605,7 @@ public class PartitionUpdate extends AbstractBTreePartition
             BTree.Builder<Row> rows = BTree.builder(metadata.comparator, header.rowEstimate);
             rows.auto(false);
 
-            try (UnfilteredRowIterator partition = UnfilteredRowIteratorSerializer.serializer.deserialize(in, version, metadata, flag, header, null))
+            try (UnfilteredRowIterator partition = UnfilteredRowIteratorSerializer.serializer.deserialize(in, version, metadata, flag, header))
             {
                 while (partition.hasNext())
                 {

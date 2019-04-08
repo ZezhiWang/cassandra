@@ -64,7 +64,6 @@ public abstract class ReadResponse
     }
 
     public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command);
-    public abstract UnfilteredPartitionIterator makeIterator(ReadCommand command, TagVal tv);
     public abstract ByteBuffer digest(ReadCommand command);
 
     public abstract boolean isDigestResponse();
@@ -201,11 +200,7 @@ public abstract class ReadResponse
             this.flag = flag;
         }
 
-
-        public UnfilteredPartitionIterator makeIterator(ReadCommand command){
-            return makeIterator(command, null);
-        }
-        public UnfilteredPartitionIterator makeIterator(ReadCommand command, TagVal tv)
+        public UnfilteredPartitionIterator makeIterator(ReadCommand command)
         {
             try (DataInputBuffer in = new DataInputBuffer(data, true))
             {
@@ -216,8 +211,7 @@ public abstract class ReadResponse
                                                                                          dataSerializationVersion,
                                                                                          command.metadata(),
                                                                                          command.columnFilter(),
-                                                                                         flag,
-                        tv);
+                                                                                         flag);
             }
             catch (IOException e)
             {

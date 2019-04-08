@@ -205,7 +205,7 @@ public class UnfilteredRowIteratorSerializer
         return new Header(header, key, isReversed, false, partitionDeletion, staticRow, rowEstimate);
     }
 
-    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, SerializationHelper.Flag flag, Header header, TagVal tv) throws IOException
+    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, SerializationHelper.Flag flag, Header header) throws IOException
     {
         if (header.isEmpty)
             return EmptyIterators.unfilteredRow(metadata, header.key, header.isReversed);
@@ -220,7 +220,7 @@ public class UnfilteredRowIteratorSerializer
             {
                 try
                 {
-                    Unfiltered unfiltered = UnfilteredSerializer.serializer.deserialize(in, sHeader, helper, builder, tv);
+                    Unfiltered unfiltered = UnfilteredSerializer.serializer.deserialize(in, sHeader, helper, builder);
                     return unfiltered == null ? endOfData() : unfiltered;
                 }
                 catch (IOException e)
@@ -231,9 +231,9 @@ public class UnfilteredRowIteratorSerializer
         };
     }
 
-    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, ColumnFilter selection, SerializationHelper.Flag flag, TagVal tv) throws IOException
+    public UnfilteredRowIterator deserialize(DataInputPlus in, int version, TableMetadata metadata, ColumnFilter selection, SerializationHelper.Flag flag) throws IOException
     {
-        return deserialize(in, version, metadata, flag, deserializeHeader(metadata, selection, in, version, flag), tv);
+        return deserialize(in, version, metadata, flag, deserializeHeader(metadata, selection, in, version, flag));
     }
 
     public static class Header

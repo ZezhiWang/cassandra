@@ -81,7 +81,7 @@ public abstract class SSTableSimpleIterator extends AbstractIterator<Unfiltered>
         {
             try
             {
-                Unfiltered unfiltered = UnfilteredSerializer.serializer.deserialize(in, header, helper, builder,null);
+                Unfiltered unfiltered = UnfilteredSerializer.serializer.deserialize(in, header, helper, builder);
                 return unfiltered == null ? endOfData() : unfiltered;
             }
             catch (IOException e)

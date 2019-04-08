@@ -181,7 +181,7 @@ public class CachedBTreePartition extends ImmutableBTreePartition implements Cac
             assert !header.isReversed && header.rowEstimate >= 0;
 
             Holder holder;
-            try (UnfilteredRowIterator partition = UnfilteredRowIteratorSerializer.serializer.deserialize(in, version, metadata, SerializationHelper.Flag.LOCAL, header,null))
+            try (UnfilteredRowIterator partition = UnfilteredRowIteratorSerializer.serializer.deserialize(in, version, metadata, SerializationHelper.Flag.LOCAL, header))
             {
                 holder = ImmutableBTreePartition.build(partition, header.rowEstimate);
             }
