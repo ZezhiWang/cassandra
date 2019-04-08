@@ -734,7 +734,7 @@ public class StorageProxy implements StorageProxyMBean
             newMutations.add(newMutation);
         }
 
-        mutateDoWrite(newMutations, ConsistencyLevel.NONE, System.nanoTime());
+        mutateDoWrite(newMutations, System.nanoTime());
     }
 
     /**
@@ -745,83 +745,17 @@ public class StorageProxy implements StorageProxyMBean
      * doing a majority read first before performing writes -- takes time
      * so we need to pass in the actual start time of the ABD write.
      * @param mutations the mutations to be applied across the replicas
-     * @param consistency_level the consistency level for the operation
      * @param mutateStartNanoTime the value of System.nanoTime() when mutate() method is called
      */
-    public static void mutateDoWrite(Collection<? extends IMutation> mutations, ConsistencyLevel consistency_level, long mutateStartNanoTime)
+    public static void mutateDoWrite(Collection<? extends IMutation> mutations, long mutateStartNanoTime)
     throws UnavailableException, OverloadedException, WriteTimeoutException, WriteFailureException
     {
         final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddressAndPort());
 
-        List<AbstractWriteResponseHandler<IMutation>> responseHandlers = new ArrayList<>(mutations.size());
-
-        try
+        for (IMutation mutation : mutations)
         {
-            for (IMutation mutation : mutations)
-            {
-                if (mutation instanceof CounterMutation)
-                {
-                    responseHandlers.add(mutateCounter((CounterMutation)mutation, localDataCenter, mutateStartNanoTime));
-                }
-                else
-                {
-                    WriteType wt = mutations.size() <= 1 ? WriteType.SIMPLE : WriteType.UNLOGGED_BATCH;
-                    responseHandlers.add(performWrite(mutation, consistency_level, localDataCenter, standardWritePerformer, null, wt, mutateStartNanoTime));
-                }
-            }
-
-            // wait for writes.  throws TimeoutException if necessary
-            for (AbstractWriteResponseHandler<IMutation> responseHandler : responseHandlers)
-            {
-                responseHandler.get();
-            }
-        }
-        catch (WriteTimeoutException|WriteFailureException ex)
-        {
-            if (consistency_level == ConsistencyLevel.ANY)
-            {
-                hintMutations(mutations);
-            }
-            else
-            {
-                if (ex instanceof WriteFailureException)
-                {
-                    writeMetrics.failures.mark();
-                    writeMetricsMap.get(consistency_level).failures.mark();
-                    WriteFailureException fe = (WriteFailureException)ex;
-                    Tracing.trace("Write failure; received {} of {} required replies, failed {} requests",
-                                  fe.received, fe.blockFor, fe.failureReasonByEndpoint.size());
-                }
-                else
-                {
-                    writeMetrics.timeouts.mark();
-                    writeMetricsMap.get(consistency_level).timeouts.mark();
-                    WriteTimeoutException te = (WriteTimeoutException)ex;
-                    Tracing.trace("Write timeout; received {} of {} required replies", te.received, te.blockFor);
-                }
-                throw ex;
-            }
-        }
-        catch (UnavailableException e)
-        {
-            writeMetrics.unavailables.mark();
-            writeMetricsMap.get(consistency_level).unavailables.mark();
-            Tracing.trace("Unavailable");
-            throw e;
-        }
-        catch (OverloadedException e)
-        {
-            writeMetrics.unavailables.mark();
-            writeMetricsMap.get(consistency_level).unavailables.mark();
-            Tracing.trace("Overloaded");
-            throw e;
-        }
-        finally
-        {
-            long latency = System.nanoTime() - mutateStartNanoTime;
-            writeMetrics.addNano(latency);
-            writeMetricsMap.get(consistency_level).addNano(latency);
-            updateCoordinatorWriteLatencyTableMetric(mutations, latency);
+            WriteType wt = mutations.size() <= 1 ? WriteType.SIMPLE : WriteType.UNLOGGED_BATCH;
+            performWrite(mutation, ConsistencyLevel.NONE, localDataCenter, standardWritePerformer, null, wt, mutateStartNanoTime);
         }
     }
 
@@ -1437,19 +1371,14 @@ public class StorageProxy implements StorageProxyMBean
             submitHint(mutation, endpointsToHint, responseHandler);
 
         if (insertLocal){
-            logger.info("Performing local changes");
             performLocally(stage, Optional.of(mutation), mutation::apply, responseHandler);
         }
 
         if (localDc != null)
         {
-            int i = 0;
             for (InetAddressAndPort destination : localDc){
-                logger.info("Sending to a foreign server");
                 MessagingService.instance().sendRR(message, destination, responseHandler, true);
-                i++;
             }
-            logger.warn("Sent to {} replicas",i);
         }
 
         if (dcGroups != null)
