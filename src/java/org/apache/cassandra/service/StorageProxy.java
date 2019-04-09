@@ -1376,8 +1376,12 @@ public class StorageProxy implements StorageProxyMBean
 
         if (localDc != null)
         {
+            int counter = 1;
             for (InetAddressAndPort destination : localDc){
+                if (counter >= SbqConsts.WRITE_QUORUM)
+                    break;
                 MessagingService.instance().sendRR(message, destination, responseHandler, true);
+                counter++;
             }
         }
 

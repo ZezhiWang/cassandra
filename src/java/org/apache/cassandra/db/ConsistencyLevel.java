@@ -95,10 +95,9 @@ public enum ConsistencyLevel
         return (keyspace.getReplicationStrategy().getReplicationFactor() / 2) + 1;
     }
 
-    private int sbqFor(Keyspace keyspace)
+    private int sbqFor()
     {
-        int n = keyspace.getReplicationStrategy().getReplicationFactor();
-        return n % 2 == 0 ? n/2+SbqConsts.F+1 : n/2+SbqConsts.F+2;
+        return SbqConsts.READ_QUORUM;
     }
 
     private int localQuorumFor(Keyspace keyspace, String dc)
@@ -113,7 +112,7 @@ public enum ConsistencyLevel
         switch (this)
         {
             case SBQ:
-                return sbqFor(keyspace);
+                return sbqFor();
             case NONE:
                 return 0;
             case ONE:

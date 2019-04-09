@@ -29,6 +29,8 @@ public class SbqConsts {
     public static ColumnIdentifier VAL_CI = new ColumnIdentifier(VAL,true);
 
     public static int F = 1;
+    public static int READ_QUORUM = 3;
+    public static int WRITE_QUORUM = 5;
 
     public static int MAX_TS = -1;
 
