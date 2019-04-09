@@ -703,17 +703,17 @@ public class StorageProxy implements StorageProxyMBean
             int nowInSec = FBUtilities.nowInSeconds();
             DecoratedKey  decoratedKey =  mutation.key();
 
-//            SinglePartitionReadCommand tagRead = SinglePartitionReadCommand.fullPartitionRead(
-//                                                        tableMetadata,
-//                                                        nowInSec,
-//                                                        decoratedKey
-//                                                        );
-
-            SinglePartitionReadCommand tagRead = SinglePartitionReadCommand.tagRead(
+            SinglePartitionReadCommand tagRead = SinglePartitionReadCommand.fullPartitionRead(
                                                         tableMetadata,
                                                         nowInSec,
                                                         decoratedKey
                                                         );
+
+//            SinglePartitionReadCommand tagRead = SinglePartitionReadCommand.tagRead(
+//                                                        tableMetadata,
+//                                                        nowInSec,
+//                                                        decoratedKey
+//                                                        );
             tagReadList.add(tagRead);
         }
 
@@ -1954,7 +1954,7 @@ public class StorageProxy implements StorageProxyMBean
 
         // execute the tag value read, the result will be the
         // tag value pair with the largest tag
-        
+
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, System.nanoTime());
         PartitionIterator pi = prepIteratorNeedUpd(commands, tagValueResult);
         if (pi == null)
