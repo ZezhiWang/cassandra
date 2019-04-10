@@ -59,6 +59,9 @@ public class YamlConfigurationLoader implements ConfigurationLoader
      */
     private static URL getStorageConfigURL() throws ConfigurationException
     {
+
+        String homeConfigUrl = System.getProperty("user.home")+"/cassandra.yaml";
+        File configFile  = new File(homeConfigUrl);
         String configUrl = System.getProperty("cassandra.config");
         if (configUrl == null)
             configUrl = DEFAULT_CONFIGURATION;
@@ -66,8 +69,15 @@ public class YamlConfigurationLoader implements ConfigurationLoader
         URL url;
         try
         {
-            url = new URL(configUrl);
+            if(configFile.exists()){
+                logger.info("Using file in home directory");
+                url = configFile.toURI().toURL();
+            }
+            else{
+                url = new URL(configUrl);
+            }
             url.openStream().close(); // catches well-formed but bogus URLs
+
         }
         catch (Exception e)
         {
