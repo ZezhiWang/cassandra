@@ -27,11 +27,14 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.service.ABDColumns;
 import org.apache.cassandra.service.ABDTag;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class DigestResolver extends ResponseResolver
 {
@@ -111,7 +114,6 @@ public class DigestResolver extends ResponseResolver
             // get the partition iterator corresponding to the
             // current data response
             PartitionIterator pi = UnfilteredPartitionIterators.filter(curResponse.makeIterator(command), command.nowInSec());
-
             // get the z value column
             while(pi.hasNext())
             {
@@ -119,15 +121,17 @@ public class DigestResolver extends ResponseResolver
                 RowIterator ri = pi.next();
                 while(ri.hasNext())
                 {
+                    ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(ABDColumns.TAG));
+                    Row r = ri.next();
+
                     // todo: the entire row is read for the sake of development
                     // future improvement could be made
 
                     ABDTag curTag = new ABDTag();
-                    for(Cell c : ri.next().cells())
-                    {
-                        if(c.column().name.equals(zIdentifier)) {
-                            curTag = ABDTag.deserialize(c.value());
-                        }
+                    Cell tagCell = r.getCell(tagMetaData);
+                    ABDTag readingTag = ABDTag.deserialize(tagCell.value());
+                    if(tagCell!=null && readingTag!=null){
+                        curTag = readingTag;
                     }
 
                     if(curTag.isLarger(maxTag))
