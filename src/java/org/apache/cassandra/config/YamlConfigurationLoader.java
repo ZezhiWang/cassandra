@@ -61,6 +61,8 @@ public class YamlConfigurationLoader implements ConfigurationLoader
     {
 
         String homeConfigUrl = System.getProperty("user.home")+"/cassandra.yaml";
+        logger.info("Home config url {}",homeConfigUrl);
+
         File configFile  = new File(homeConfigUrl);
         String configUrl = System.getProperty("cassandra.config");
         if (configUrl == null)
