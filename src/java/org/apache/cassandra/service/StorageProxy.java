@@ -1535,7 +1535,7 @@ public class StorageProxy implements StorageProxyMBean
         if (endpointsToHint != null)
             submitHint(mutation, endpointsToHint, responseHandler);
 
-        if (insertLocal)
+        if (insertLocal && MutationVerbHandler.shouldUpd(mutation))
             performLocally(stage, Optional.of(mutation), mutation::apply, responseHandler);
 
         if (localDc != null)

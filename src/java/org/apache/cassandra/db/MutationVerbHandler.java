@@ -72,86 +72,85 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
             replyTo = from;
         }
 
-        try
+        if (shouldUpd(message.payload))
         {
-            // first we have to create a read request out of the current mutation
-            SinglePartitionReadCommand localRead =
-            SinglePartitionReadCommand.fullPartitionRead(
-            message.payload.getPartitionUpdates().iterator().next().metadata(),
-            FBUtilities.nowInSeconds(),
-            message.payload.key()
-            );
+            message.payload.applyFuture().thenAccept(o -> reply(id, replyTo)).exceptionally(wto -> {
+                failed();
+                return null;
+            });
+        }
+        else
+        {
+            reply(id, replyTo);
+        }
+    }
 
-            int z_value_local = -1;
-            String writer_id_local = "";
 
-            // execute the read request locally to obtain the tag of the key
-            // and extract tag information from the local read
-            try (ReadExecutionController executionController = localRead.executionController();
-                 UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController))
+    public static boolean shouldUpd(Mutation mutation){
+        // first we have to create a read request out of the current mutation
+        SinglePartitionReadCommand localRead =
+                SinglePartitionReadCommand.fullPartitionRead(
+                        mutation.getPartitionUpdates().iterator().next().metadata(),
+                        FBUtilities.nowInSeconds(),
+                        mutation.key()
+                );
+
+        int z_value_local = -1;
+        String writer_id_local = "";
+
+        // execute the read request locally to obtain the tag of the key
+        // and extract tag information from the local read
+        try (ReadExecutionController executionController = localRead.executionController();
+             UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController))
+        {
+            // first we have to transform it into a PartitionIterator
+            PartitionIterator pi = UnfilteredPartitionIterators.filter(iterator, localRead.nowInSec());
+            while(pi.hasNext())
             {
-                // first we have to transform it into a PartitionIterator
-                PartitionIterator pi = UnfilteredPartitionIterators.filter(iterator, localRead.nowInSec());
-                while(pi.hasNext())
+                RowIterator ri = pi.next();
+                while(ri.hasNext())
                 {
-                    RowIterator ri = pi.next();
-                    while(ri.hasNext())
-                    {
-                        Row r = ri.next();
+                    Row r = ri.next();
 
-                        ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
-                        Cell c = r.getCell(colMeta);
-                        z_value_local = ByteBufferUtil.toInt(c.value());
-                        if(Config.ID_ON){
-                            colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
-                            c = r.getCell(colMeta);
+                    ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
+                    Cell c = r.getCell(colMeta);
+                    z_value_local = ByteBufferUtil.toInt(c.value());
+                    if(Config.ID_ON){
+                        colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
+                        c = r.getCell(colMeta);
+                        try{
                             writer_id_local = ByteBufferUtil.string(c.value());
+                        } catch (CharacterCodingException e){
+                            logger.error("Err: {}",e);
                         }
+
                     }
                 }
-            }
-
-            // extract the tag information from the mutation
-            int z_value_request = 0;
-            String writer_id_request = "";
-            Row data = message.payload.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
-            for (Cell c : data.cells())
-            {
-                if(c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
-                {
-                    z_value_request = ByteBufferUtil.toInt(c.value());
-                }
-                else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
-                {
-                    try{
-                        writer_id_request = ByteBufferUtil.string(c.value());
-                    } catch (CharacterCodingException e) {
-                        logger.info("cannot get writer_id");
-                    }
-
-                }
-            }
-
-            //System.out.printf("local z:%d %s request z:%d %s\n", z_value_local, writer_id_local, z_value_request, writer_id_request);
-
-            // comparing the tag and the one in mutation, act accordingly
-            if (z_value_request > z_value_local || (Config.ID_ON && z_value_request == z_value_local && writer_id_request.compareTo(writer_id_local) > 0))
-            {
-                message.payload.applyFuture().thenAccept(o -> reply(id, replyTo)).exceptionally(wto -> {
-                    failed();
-                    return null;
-                });
-            }
-            else
-            {
-                reply(id, replyTo);
- //               failed();
             }
         }
-        catch (WriteTimeoutException wto)
+
+        // extract the tag information from the mutation
+        int z_value_request = 0;
+        String writer_id_request = "";
+        Row data = mutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
+        for (Cell c : data.cells())
         {
-            failed();
+            if(c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
+            {
+                z_value_request = ByteBufferUtil.toInt(c.value());
+            }
+            else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
+            {
+                try{
+                    writer_id_request = ByteBufferUtil.string(c.value());
+                } catch (CharacterCodingException e) {
+                    logger.info("cannot get writer_id");
+                }
+
+            }
         }
+
+        return z_value_request > z_value_local || (Config.ID_ON && z_value_request == z_value_local && writer_id_request.compareTo(writer_id_local) > 0);
     }
 
     private static void forwardToLocalNodes(Mutation mutation, MessagingService.Verb verb, ForwardToContainer forwardTo, InetAddressAndPort from) throws IOException
