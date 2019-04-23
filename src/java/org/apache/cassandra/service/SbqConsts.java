@@ -23,10 +23,8 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 public class SbqConsts {
 
     public static String TS = "ts";
-    public static ColumnIdentifier TS_CI = new ColumnIdentifier(TS,true);
 
     public static String VAL = "field0";
-    public static ColumnIdentifier VAL_CI = new ColumnIdentifier(VAL,true);
 
     public static int F = 1;
     public static int READ_QUORUM = 3;

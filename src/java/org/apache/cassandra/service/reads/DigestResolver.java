@@ -29,8 +29,10 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.service.SbqConsts;
 import org.apache.cassandra.service.TagVal;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
@@ -111,19 +113,21 @@ public class DigestResolver extends ResponseResolver
             while(pi.hasNext())
             {
                 RowIterator ri = pi.next();
+                ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(SbqConsts.TS));
+                ColumnMetadata valMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(SbqConsts.VAL));
                 while(ri.hasNext())
                 {
+                    Row r = ri.next();
                     TagVal tmpTv = new TagVal(-1,"");
-                    for(Cell c : ri.next().cells()) {
-                        if (c.column().name.equals(SbqConsts.TS_CI)) {
-                            tmpTv.ts = ByteBufferUtil.toInt(c.value());
-                        } else if (c.column().name.equals(SbqConsts.VAL_CI)){
-                            try{
-                                tmpTv.val = ByteBufferUtil.string(c.value());
-                            } catch (CharacterCodingException e){
-                                logger.info("Err getting value: {}",e);
-                            }
-                        }
+                    Cell tagCell = r.getCell(tagMetaData);
+                    Cell valCell = r.getCell(valMetaData);
+                    if(tagCell!=null){
+                        tmpTv.ts = ByteBufferUtil.toInt(tagCell.value());
+                    }
+                    try{
+                        tmpTv.val = ByteBufferUtil.string(valCell.value());
+                    } catch (CharacterCodingException e){
+                        logger.info("Err getting value: {}",e);
                     }
                     int count = tvCount.containsKey(tmpTv) ? tvCount.get(tmpTv)+1 : 1;
                     tvCount.put(tmpTv,count);
@@ -154,13 +158,15 @@ public class DigestResolver extends ResponseResolver
             PartitionIterator pi = UnfilteredPartitionIterators.filter(curResponse.makeIterator(command), command.nowInSec());
             while (pi.hasNext()) {
                 RowIterator ri = pi.next();
+                ColumnMetadata tagMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(SbqConsts.TS));
+
                 while (ri.hasNext()) {
+                    Row r  = ri.next();
+                    Cell tagCell = r.getCell(tagMetaData);
+
                     int curTs = -1;
-                    for (Cell c : ri.next().cells()) {
-                        if(c.column().name.equals(SbqConsts.TS_CI)){
-                            curTs = ByteBufferUtil.toInt(c.value());
-                            break;
-                        }
+                    if(tagCell!=null){
+                        curTs = ByteBufferUtil.toInt(tagCell.value());
                     }
                     if (curTs > maxTs) {
                         maxTs = curTs;
