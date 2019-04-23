@@ -100,6 +100,8 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
 
         // execute the read request locally to obtain the tag of the key
         // and extract tag information from the local read
+        ColumnMetadata zValueMetaData =null;
+        ColumnMetadata writerIdMeta =null;
         try (ReadExecutionController executionController = localRead.executionController();
              UnfilteredPartitionIterator iterator = localRead.executeLocally(executionController))
         {
@@ -112,12 +114,12 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                 {
                     Row r = ri.next();
 
-                    ColumnMetadata colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
-                    Cell c = r.getCell(colMeta);
+                    zValueMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
+                    Cell c = r.getCell(zValueMetaData);
                     z_value_local = ByteBufferUtil.toInt(c.value());
                     if(Config.ID_ON){
-                        colMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
-                        c = r.getCell(colMeta);
+                        writerIdMeta = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.ID));
+                        c = r.getCell(writerIdMeta);
                         try{
                             writer_id_local = ByteBufferUtil.string(c.value());
                         } catch (CharacterCodingException e){
@@ -133,20 +135,36 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         int z_value_request = 0;
         String writer_id_request = "";
         Row data = mutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
-        for (Cell c : data.cells())
-        {
-            if(c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
-            {
-                z_value_request = ByteBufferUtil.toInt(c.value());
+        if(zValueMetaData!=null &&(!Config.ID_ON || writerIdMeta!=null)){
+            Cell zValueCell = data.getCell(zValueMetaData);
+            z_value_request = ByteBufferUtil.toInt(zValueCell.value());
+            Cell writerIdCell = data.getCell(writerIdMeta);
+            try{
+                writer_id_request = ByteBufferUtil.string(writerIdCell.value());
+            } catch (CharacterCodingException e) {
+                logger.info("cannot get writer_id");
             }
-            else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
-            {
-                try{
-                    writer_id_request = ByteBufferUtil.string(c.value());
-                } catch (CharacterCodingException e) {
-                    logger.info("cannot get writer_id");
-                }
+        }
+        else
+        {
 
+            for (Cell c : data.cells())
+            {
+                if (c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
+                {
+                    z_value_request = ByteBufferUtil.toInt(c.value());
+                }
+                else if (Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
+                {
+                    try
+                    {
+                        writer_id_request = ByteBufferUtil.string(c.value());
+                    }
+                    catch (CharacterCodingException e)
+                    {
+                        logger.info("cannot get writer_id");
+                    }
+                }
             }
         }
 
