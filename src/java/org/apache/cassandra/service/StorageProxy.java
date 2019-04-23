@@ -1956,9 +1956,7 @@ public class StorageProxy implements StorageProxyMBean
         // tag value pair with the largest tag
 
         List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, System.nanoTime());
-        PartitionIterator pi = prepIteratorNeedUpd(commands, tagValueResult);
-        if (pi == null)
-            return prepIterator(commands, tagValueResult);
+        PartitionIterator pi = prepIterator(commands, tagValueResult);
 
         List<IMutation> mutationList = new ArrayList<>();
         // write the tag value pair with the largest tag to all servers
@@ -2041,18 +2039,6 @@ public class StorageProxy implements StorageProxyMBean
             results.add(reads[i].getResult());
         }
         return results;
-    }
-
-    private static PartitionIterator prepIteratorNeedUpd(List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
-        List<PartitionIterator> partitionIterators = new ArrayList<>();
-        int idx = 0;
-        for(ReadResponse rr : responses){
-            SinglePartitionReadCommand command = commands.get(idx);
-            if(rr.needWriteBack)
-                partitionIterators.add(UnfilteredPartitionIterators.filter(rr.makeIterator(command), command.nowInSec()));
-            idx++;
-        }
-        return partitionIterators.size() > 0 ? PartitionIterators.concat(partitionIterators) : null;
     }
 
     private static PartitionIterator prepIterator (List<SinglePartitionReadCommand> commands, List<ReadResponse> responses) {
