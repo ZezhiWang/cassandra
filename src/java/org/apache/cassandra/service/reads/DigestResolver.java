@@ -140,7 +140,7 @@ public class DigestResolver extends ResponseResolver
                         maxResponse = curResponse;
                     }
 
-                    if(curTag.getTime() > maxTag.getTime())
+                    if(curTag.getTime() != maxTag.getTime())
                         numDiff++;
                 }
             }
