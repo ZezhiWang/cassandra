@@ -98,7 +98,6 @@ public class DigestResolver extends ResponseResolver
     {
         // check all data responses,
         // extract the one with max z value
-        int numDiff = 0;
         ABDTag maxTag = new ABDTag();
         ReadResponse maxResponse = null;
 
@@ -139,14 +138,9 @@ public class DigestResolver extends ResponseResolver
                         maxTag = curTag;
                         maxResponse = curResponse;
                     }
-
-                    if(curTag.getTime() > maxTag.getTime())
-                        numDiff++;
                 }
             }
         }
-        if(numDiff > 1)
-            maxResponse.needWriteBack = true;
         return maxResponse;
     }
 
