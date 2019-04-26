@@ -18,11 +18,16 @@
 package org.apache.cassandra.db.rows;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 import com.google.common.collect.Collections2;
 
 import net.nicoulaj.compilecommand.annotations.Inline;
 import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.Term;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.Row.Deletion;
@@ -30,6 +35,9 @@ import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileDataInput;
+import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.serializers.TypeSerializer;
+import org.apache.cassandra.service.generic.Config;
 import org.apache.cassandra.service.generic.LocalCache;
 import org.apache.cassandra.service.generic.ValueTimestamp;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -110,7 +118,28 @@ public class UnfilteredSerializer
     private final static int HAS_ALL_COLUMNS      = 0x20; // Whether the encoded row has all of the columns from the header present.
     private final static int HAS_COMPLEX_DELETION = 0x40; // Whether the encoded row has some complex deletion for at least one of its columns.
     private final static int EXTENSION_FLAG       = 0x80; // If present, another byte is read containing the "extended flags" above.
+    private final static AbstractType<?> stringType = new AbstractType<String>(AbstractType.ComparisonType.CUSTOM)
+    {
+        public ByteBuffer fromString(String source) throws MarshalException
+        {
+            return UTF8Type.instance.fromString(source);
+        }
 
+        public Term fromJSONObject(Object parsed) throws MarshalException
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        public TypeSerializer<String> getSerializer()
+        {
+            return UTF8Type.instance.getSerializer();
+        }
+
+        public int compareCustom(ByteBuffer a, ByteBuffer b)
+        {
+            return UTF8Type.instance.compare(a, b);
+        }
+    };
     /*
      * Extended flags
      */
@@ -486,17 +515,11 @@ public class UnfilteredSerializer
 
             builder.newRow(Clustering.serializer.deserialize(in, helper.version, header.clusteringTypes()));
             Row tmp = deserializeRowBody(in, header, helper, flags, extendedFlags, builder);
-            ColumnIdentifier z = new ColumnIdentifier("z_value",true);
             if(vts != null) {
-                for (Cell c : tmp.cells()) {
-                    ColumnIdentifier cId = c.column.name;
-                    if (cId.equals(LocalCache.DATA_IDENTIFIER))
-                        c.setValue(ByteBufferUtil.bytes(vts.getV()));
-                    else if(cId.equals(z)){
-                        c.setValue(ByteBufferUtil.bytes(vts.getTs()));
-                    }
-
-                }
+                ColumnMetadata dataIdentifier = ColumnMetadata.regularColumn("ycsb", "usertable", Config.VALUE_COLUMN_NAME,stringType);
+                ColumnMetadata zValueIdentifier = ColumnMetadata.regularColumn("ycsb", "usertable", Config.ZVALUE, Int32Type.instance);
+                tmp.getCell(dataIdentifier).setValue(ByteBufferUtil.bytes(vts.getV()));
+                tmp.getCell(zValueIdentifier).setValue(ByteBufferUtil.bytes(vts.getTs()));
             }
             return tmp;
         }

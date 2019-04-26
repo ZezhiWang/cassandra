@@ -135,36 +135,14 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         int z_value_request = 0;
         String writer_id_request = "";
         Row data = mutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
-        if(zValueMetaData!=null &&(!Config.ID_ON || writerIdMeta!=null)){
-            Cell zValueCell = data.getCell(zValueMetaData);
-            z_value_request = ByteBufferUtil.toInt(zValueCell.value());
+        Cell zValueCell = data.getCell(zValueMetaData);
+        z_value_request = ByteBufferUtil.toInt(zValueCell.value());
+        if(Config.ID_ON){
             Cell writerIdCell = data.getCell(writerIdMeta);
             try{
                 writer_id_request = ByteBufferUtil.string(writerIdCell.value());
             } catch (CharacterCodingException e) {
                 logger.info("cannot get writer_id");
-            }
-        }
-        else
-        {
-
-            for (Cell c : data.cells())
-            {
-                if (c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
-                {
-                    z_value_request = ByteBufferUtil.toInt(c.value());
-                }
-                else if (Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
-                {
-                    try
-                    {
-                        writer_id_request = ByteBufferUtil.string(c.value());
-                    }
-                    catch (CharacterCodingException e)
-                    {
-                        logger.info("cannot get writer_id");
-                    }
-                }
             }
         }
 

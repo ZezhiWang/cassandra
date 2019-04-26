@@ -152,48 +152,55 @@ public class DigestResolver extends ResponseResolver
             return maxZResponse;
     }
 
-    private void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ) {
+    private void updateMaxResponseAndLC(ReadResponse maxZResponse,int maxZ)
+    {
         PartitionIterator pi = UnfilteredPartitionIterators
-                .filter(maxZResponse.makeIterator(command), command.nowInSec());
+                               .filter(maxZResponse.makeIterator(command), command.nowInSec());
         String primaryKey = "";
         String dataValue = "";
-        while (pi.hasNext()) {
+        while (pi.hasNext())
+        {
             RowIterator ri = pi.next();
-            while (ri.hasNext()) {
+            while (ri.hasNext())
+            {
                 Row r = ri.next();
-                for (Cell c : r.cells()) {
-                    // todo: the entire row is read for the sake of developmen future improvement could be made
-                     if (c.column().isPrimaryKeyColumn()) {
-                        try {
-                            primaryKey = ByteBufferUtil.string(c.value());
-                        } catch (CharacterCodingException e) {
-                            logger.error("Could not parse the primary key");
-                        }
-                    }
-                    else if (c.column().name.equals(LocalCache.DATA_IDENTIFIER)) {
-                         try {
-                             dataValue = ByteBufferUtil.string(c.value());
-                         } catch (CharacterCodingException e) {
-                             logger.error("Could not parse the data");
-                         }
-                    }
+                ColumnMetadata valueMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.VALUE_COLUMN_NAME));
+                ColumnMetadata keyMetaData = ri.metadata().getColumn(ByteBufferUtil.bytes(Config.KEY_COLUMN_NAME));
+                Cell primaryKeyColumn = r.getCell(keyMetaData);
+                Cell dataValueColumn = r.getCell(valueMetaData);
+                try
+                {
+                    primaryKey = ByteBufferUtil.string(primaryKeyColumn.value());
+                }
+                catch (CharacterCodingException e)
+                {
+                    logger.error("Could not parse the primary key");
+                }
+
+                try
+                {
+                    dataValue = ByteBufferUtil.string(dataValueColumn.value());
+                }
+                catch (CharacterCodingException e)
+                {
+                    logger.error("Could not parse the data");
                 }
             }
+
+
+            ValueTimestamp valueTimestamp = LocalCache.getVTS(primaryKey);
+            if (valueTimestamp == null || valueTimestamp.getTs() < maxZ)
+            {
+                logger.info("Updating the local cache with the maximum z value response");
+                ValueTimestamp newVTS = new ValueTimestamp(dataValue, maxZ);
+                LocalCache.setVTS(primaryKey, newVTS);
+            }
+            else
+            {
+                logger.info("Using the value in the local cache for the response");
+                maxZResponse.setVts(valueTimestamp);
+            }
         }
-        ValueTimestamp valueTimestamp = LocalCache.getVTS(primaryKey);
-        if(valueTimestamp ==null || valueTimestamp.getTs()<maxZ){
-            logger.info("Updating the local cache with the maximum z value response");
-            ValueTimestamp newVTS = new ValueTimestamp(dataValue,maxZ);
-            LocalCache.setVTS(primaryKey,newVTS);
-        }
-        else{
-            logger.info("Using the value in the local cache for the response");
-            maxZResponse.setVts(valueTimestamp);
-
-        }
-
-
-
     }
     public boolean isDataPresent()
     {

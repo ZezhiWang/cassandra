@@ -25,6 +25,7 @@ public class Config
     public static final boolean LC_ON = true;
 
     public static final String VALUE_COLUMN_NAME  = "field0";
+    public static final String KEY_COLUMN_NAME =  "y_id";
     public static final String ZVALUE  = "z_value";
     public static final String ID  = "writer_id";
 }
