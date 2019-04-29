@@ -43,7 +43,7 @@ public abstract class ResponseResolver
         this.command = command;
         this.consistency = consistency;
         this.readRepair = readRepair;
-        this.responses = new Accumulator<>(maxResponseCount);
+        this.responses = new Accumulator<>(maxResponseCount*2);
     }
 
     public abstract boolean isDataPresent();
