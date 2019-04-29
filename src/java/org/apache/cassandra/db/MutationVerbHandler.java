@@ -74,10 +74,14 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
 
         if (shouldUpd(message.payload))
         {
-            message.payload.applyFuture().thenAccept(o -> reply(id, replyTo)).exceptionally(wto -> {
+            try {
+                message.payload.applyFuture().thenAccept(o -> reply(id, replyTo)).exceptionally(wto -> {
+                    failed();
+                    return null;
+                });
+            } catch (WriteTimeoutException wto) {
                 failed();
-                return null;
-            });
+            }
         }
         else
         {
@@ -132,12 +136,18 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         // extract the tag information from the mutation
         int z_value_request = 0;
         String writer_id_request = "";
+        boolean flag = false;
         Row data = mutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
         for (Cell c : data.cells())
         {
             if(c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
             {
                 z_value_request = ByteBufferUtil.toInt(c.value());
+                if (flag){
+                    break;
+                } else{
+                    flag = true;
+                }
             }
             else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
             {
@@ -146,7 +156,11 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                 } catch (CharacterCodingException e) {
                     logger.info("cannot get writer_id");
                 }
-
+                if (flag){
+                    break;
+                } else{
+                    flag = true;
+                }
             }
         }
 
