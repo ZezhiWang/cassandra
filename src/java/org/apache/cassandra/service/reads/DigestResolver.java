@@ -182,15 +182,14 @@ public class DigestResolver extends ResponseResolver
             }
         }
         ValueTimestamp valueTimestamp = LocalCache.getVTS(primaryKey);
-        if(valueTimestamp ==null || valueTimestamp.getTs()<maxZ){
-            logger.info("Updating the local cache with the maximum z value response");
+        if(valueTimestamp == null || valueTimestamp.getTs()<maxZ){
+//            logger.info("Updating the local cache with the maximum z value response");
             ValueTimestamp newVTS = new ValueTimestamp(dataValue,maxZ);
             LocalCache.setVTS(primaryKey,newVTS);
         }
         else{
-            logger.info("Using the value in the local cache for the response");
+//            logger.info("Using the value in the local cache for the response");
             maxZResponse.setVts(valueTimestamp);
-
         }
     }
     public boolean isDataPresent()
