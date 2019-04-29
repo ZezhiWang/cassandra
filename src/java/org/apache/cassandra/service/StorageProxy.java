@@ -696,12 +696,11 @@ public class StorageProxy implements StorageProxyMBean
 
         long startTime = System.nanoTime();
 
-        // ABD get
+        // Generic get
         // create an read command to fetch the z value corresponding to the key
         List<SinglePartitionReadCommand> zValueReadList = new ArrayList<>();
         for (IMutation mutation : mutations)
         {
-            // todo: please note that this is not optimal,
             // fullPartitionRead generates a read that reading ALL
             // columns of the key, while all we need is z value
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
@@ -713,12 +712,11 @@ public class StorageProxy implements StorageProxyMBean
                                                         nowInSec,
                                                         decoratedKey
                                                         );
-
             zValueReadList.add(zValueRead);
         }
 
         HashMap<String, Integer> maxZMap = new HashMap<>();
-        List<ReadResponse> readList = fetchTagValue(zValueReadList, consistency_level, System.nanoTime());
+        List<ReadResponse> readList = fetchTagValue(zValueReadList, ConsistencyLevel.QUORUM, System.nanoTime());
 
         PartitionIterator zValueReadResult = generatePartitionIterator(readList,zValueReadList);
         while(zValueReadResult.hasNext())
@@ -737,7 +735,7 @@ public class StorageProxy implements StorageProxyMBean
             }
         }
 
-        // ABD put
+        // Generic put
         // for each incoming mutation,
         // create a mutation for modifying its z value
         // please note that we have 2 assumptions
@@ -752,7 +750,7 @@ public class StorageProxy implements StorageProxyMBean
             TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
             long timeStamp = FBUtilities.timestampMicros();
             boolean containsKey = maxZMap.containsKey(mutation.key().toString());
-            Object zValue =  containsKey ? maxZMap.get(mutation.key().toString())+1 : 0;
+            int zValue =  containsKey ? maxZMap.get(mutation.key().toString())+1 : 0;
 
             Row.SimpleBuilder rsb = mutationBuilder
                     .update(tableMetadata)
@@ -792,7 +790,7 @@ public class StorageProxy implements StorageProxyMBean
                 else
                 {
                     WriteType wt = newMutations.size() <= 1 ? WriteType.SIMPLE : WriteType.UNLOGGED_BATCH;
-                    responseHandlers.add(performWrite(mutation, consistency_level, localDataCenter, standardWritePerformer, null, wt, queryStartNanoTime));
+                    responseHandlers.add(performWrite(mutation, ConsistencyLevel.QUORUM, localDataCenter, standardWritePerformer, null, wt, queryStartNanoTime));
                 }
             }
 
@@ -804,42 +802,34 @@ public class StorageProxy implements StorageProxyMBean
         }
         catch (WriteTimeoutException|WriteFailureException ex)
         {
-            if (consistency_level == ConsistencyLevel.ANY)
+            if (ex instanceof WriteFailureException)
             {
-                hintMutations(newMutations);
+                writeMetrics.failures.mark();
+                writeMetricsMap.get(ConsistencyLevel.QUORUM).failures.mark();
+                WriteFailureException fe = (WriteFailureException)ex;
+                Tracing.trace("Write failure; received {} of {} required replies, failed {} requests",
+                              fe.received, fe.blockFor, fe.failureReasonByEndpoint.size());
             }
             else
             {
-
-                if (ex instanceof WriteFailureException)
-                {
-                    writeMetrics.failures.mark();
-                    writeMetricsMap.get(consistency_level).failures.mark();
-                    WriteFailureException fe = (WriteFailureException)ex;
-                    Tracing.trace("Write failure; received {} of {} required replies, failed {} requests",
-                                  fe.received, fe.blockFor, fe.failureReasonByEndpoint.size());
-                }
-                else
-                {
-                    writeMetrics.timeouts.mark();
-                    writeMetricsMap.get(consistency_level).timeouts.mark();
-                    WriteTimeoutException te = (WriteTimeoutException)ex;
-                    Tracing.trace("Write timeout; received {} of {} required replies", te.received, te.blockFor);
-                }
-                throw ex;
+                writeMetrics.timeouts.mark();
+                writeMetricsMap.get(ConsistencyLevel.QUORUM).timeouts.mark();
+                WriteTimeoutException te = (WriteTimeoutException)ex;
+                Tracing.trace("Write timeout; received {} of {} required replies", te.received, te.blockFor);
             }
+            throw ex;
         }
         catch (UnavailableException e)
         {
             writeMetrics.unavailables.mark();
-            writeMetricsMap.get(consistency_level).unavailables.mark();
+            writeMetricsMap.get(ConsistencyLevel.QUORUM).unavailables.mark();
             Tracing.trace("Unavailable");
             throw e;
         }
         catch (OverloadedException e)
         {
             writeMetrics.unavailables.mark();
-            writeMetricsMap.get(consistency_level).unavailables.mark();
+            writeMetricsMap.get(ConsistencyLevel.QUORUM).unavailables.mark();
             Tracing.trace("Overloaded");
             throw e;
         }
@@ -847,7 +837,7 @@ public class StorageProxy implements StorageProxyMBean
         {
             long latency = System.nanoTime() - startTime;
             writeMetrics.addNano(latency);
-            writeMetricsMap.get(consistency_level).addNano(latency);
+            writeMetricsMap.get(ConsistencyLevel.QUORUM).addNano(latency);
             updateCoordinatorWriteLatencyTableMetric(newMutations, latency);
         }
     }
@@ -1959,10 +1949,9 @@ public class StorageProxy implements StorageProxyMBean
         // to the initialization failure issue
         SinglePartitionReadCommand incomingRead = commands.iterator().next();
         ColumnMetadata tagMetadata = incomingRead.metadata().getColumn(ByteBufferUtil.bytes("z_value"));
-        boolean isAbdRead = (tagMetadata != null);
-        if(isAbdRead)
+        if(tagMetadata != null)
         {
-            return fetchRowsGeneric(commands, consistencyLevel, queryStartNanoTime);
+            return fetchRowsGeneric(commands);
         }
 
         int cmdCount = commands.size();
@@ -2009,7 +1998,7 @@ public class StorageProxy implements StorageProxyMBean
         return PartitionIterators.concat(results);
     }
 
-    private static PartitionIterator fetchRowsGeneric(List<SinglePartitionReadCommand> commands, ConsistencyLevel consistencyLevel, long queryStartNanoTime)
+    private static PartitionIterator fetchRowsGeneric(List<SinglePartitionReadCommand> commands)
     throws UnavailableException, ReadFailureException, ReadTimeoutException {
             // first we have to create a full partition read based on the
             // incoming read command to cover both value and z_value column
@@ -2027,7 +2016,7 @@ public class StorageProxy implements StorageProxyMBean
             // execute the tag value read, the result will be the
             // tag value pair with the largest tag
 
-            List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, consistencyLevel, System.nanoTime());
+            List<ReadResponse> tagValueResult = fetchTagValue(tagValueReadList, ConsistencyLevel.QUORUM, System.nanoTime());
             PartitionIterator pi = generatePartitionIterator(tagValueResult, commands);
 
             List<IMutation> mutationList = new ArrayList<>();
@@ -2049,8 +2038,6 @@ public class StorageProxy implements StorageProxyMBean
 
                     while (ri.hasNext()) {
                         Row r = ri.next();
-
-//                    logger.info(r.getCell(zValueMetadata).value().toString());
 
                         int z = ByteBufferUtil.toInt(r.getCell(zValueMetadata).value());
                         String value = "";
@@ -2089,7 +2076,7 @@ public class StorageProxy implements StorageProxyMBean
 
                 // then we will have to perform the mutatation we've
                 // just generated
-                mutateWithTag(mutationList, consistencyLevel, System.nanoTime());
+                mutateWithTag(mutationList, ConsistencyLevel.QUORUM, System.nanoTime());
             }
 
             return generatePartitionIterator(tagValueResult, commands);
@@ -2134,17 +2121,15 @@ public class StorageProxy implements StorageProxyMBean
             reads[i].awaitResponsesGeneric();
         }
 
-        // todo: this is not needed
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].maybeRepairAdditionalReplicas();
-        }
+//        for (int i=0; i<cmdCount; i++)
+//        {
+//            reads[i].maybeRepairAdditionalReplicas();
+//        }
 
-        // todo: this is not needed
-        for (int i=0; i<cmdCount; i++)
-        {
-            reads[i].awaitReadRepair();
-        }
+//        for (int i=0; i<cmdCount; i++)
+//        {
+//            reads[i].awaitReadRepair();
+//        }
     
         List<ReadResponse> results = new ArrayList<>();
 

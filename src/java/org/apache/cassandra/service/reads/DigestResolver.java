@@ -122,7 +122,9 @@ public class DigestResolver extends ResponseResolver
                 while (pi.hasNext()) {
                     RowIterator ri = pi.next();
                     TableMetadata tableMetadata = ri.metadata();
-                    ColumnMetadata writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ID));
+                    ColumnMetadata writerIdMetaData = null;
+                    if(Config.ID_ON)
+                        writerIdMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ID));
                     ColumnMetadata zValueMetaData = tableMetadata.getColumn(ByteBufferUtil.bytes(Config.ZVALUE));
                     while (ri.hasNext()) {
                         Row r = ri.next();
@@ -130,7 +132,7 @@ public class DigestResolver extends ResponseResolver
                         if (currentZ > maxZ) {
                             maxZ = currentZ;
                             maxZResponse = response;
-                        } else if (currentZ == maxZ && Config.ID_ON) {
+                        } else if (Config.ID_ON && currentZ == maxZ) {
                             String curWriter = "";
                             logger.info("Using writer id as the current z equals to maximum z");
                             try {
@@ -162,7 +164,6 @@ public class DigestResolver extends ResponseResolver
             while (ri.hasNext()) {
                 Row r = ri.next();
                 for (Cell c : r.cells()) {
-                    // todo: the entire row is read for the sake of developmen future improvement could be made
                      if (c.column().isPrimaryKeyColumn()) {
                         try {
                             primaryKey = ByteBufferUtil.string(c.value());
@@ -191,9 +192,6 @@ public class DigestResolver extends ResponseResolver
             maxZResponse.setVts(valueTimestamp);
 
         }
-
-
-
     }
     public boolean isDataPresent()
     {

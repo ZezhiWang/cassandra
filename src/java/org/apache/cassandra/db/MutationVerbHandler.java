@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
 import java.util.Iterator;
 
-import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
@@ -140,7 +139,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
         Row data = mutation.getPartitionUpdates().iterator().next().getRow(Clustering.EMPTY);
         for (Cell c : data.cells())
         {
-            if(c.column().name.equals(new ColumnIdentifier(Config.ZVALUE, true)))
+            if(c.column().name.equals(Config.zCI))
             {
                 z_value_request = ByteBufferUtil.toInt(c.value());
                 if (flag){
@@ -149,7 +148,7 @@ public class MutationVerbHandler implements IVerbHandler<Mutation>
                     flag = true;
                 }
             }
-            else if(Config.ID_ON && c.column().name.equals(new ColumnIdentifier(Config.ID, true)))
+            else if(Config.ID_ON && c.column().name.equals(Config.wCI))
             {
                 try{
                     writer_id_request = ByteBufferUtil.string(c.value());

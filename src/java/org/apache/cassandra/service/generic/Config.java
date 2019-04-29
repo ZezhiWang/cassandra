@@ -18,6 +18,8 @@
 
 package org.apache.cassandra.service.generic;
 
+import org.apache.cassandra.cql3.ColumnIdentifier;
+
 public class Config
 {
     public static final boolean ID_ON = true;
@@ -27,4 +29,7 @@ public class Config
     public static final String VALUE_COLUMN_NAME  = "field0";
     public static final String ZVALUE  = "z_value";
     public static final String ID  = "writer_id";
+
+    public static ColumnIdentifier zCI = new ColumnIdentifier(ZVALUE,true);
+    public static ColumnIdentifier wCI = new ColumnIdentifier(ID,true);
 }
