@@ -108,11 +108,11 @@ public class DigestResolver extends ResponseResolver
                 // check if the response is indeed a data response
                 // we shouldn't get a digest response here
                 if (response == null) {
-                    logger.info("response is null");
+//                    logger.info("response is null");
                     continue;
                 }
                 if (response.isDigestResponse()) {
-                    logger.info("recv digest response");
+//                    logger.info("recv digest response");
                     continue;
                 }
 
@@ -134,7 +134,7 @@ public class DigestResolver extends ResponseResolver
                             maxZResponse = response;
                         } else if (Config.ID_ON && currentZ == maxZ) {
                             String curWriter = "";
-                            logger.info("Using writer id as the current z equals to maximum z");
+//                            logger.info("Using writer id as the current z equals to maximum z");
                             try {
                                 curWriter = ByteBufferUtil.string(r.getCell(writerIdMetaData).value());
                             } catch (CharacterCodingException e) {
