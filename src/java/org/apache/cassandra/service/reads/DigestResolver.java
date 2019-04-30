@@ -121,7 +121,7 @@ public class DigestResolver extends ResponseResolver
                     TagVal tmpTv = new TagVal(-1,"");
                     Cell tagCell = r.getCell(tagMetaData);
                     Cell valCell = r.getCell(valMetaData);
-                    if(tagCell!=null){
+                    if(tagCell != null){
                         tmpTv.ts = ByteBufferUtil.toInt(tagCell.value());
                     }
                     try{
@@ -133,7 +133,6 @@ public class DigestResolver extends ResponseResolver
                     tvCount.put(tmpTv,count);
                     if(!tvResp.containsKey(tmpTv))
                         tvResp.put(tmpTv,curResponse);
-
                 }
             }
         }
@@ -165,7 +164,7 @@ public class DigestResolver extends ResponseResolver
                     Cell tagCell = r.getCell(tagMetaData);
 
                     int curTs = -1;
-                    if(tagCell!=null){
+                    if(tagCell != null){
                         curTs = ByteBufferUtil.toInt(tagCell.value());
                     }
                     if (curTs > maxTs) {

@@ -699,7 +699,7 @@ public class StorageProxy implements StorageProxyMBean
                                                         tableMetadata,
                                                         nowInSec,
                                                         decoratedKey
-                                                        );
+                                                    );
             tsReadList.add(tagRead);
         }
 
@@ -1325,7 +1325,6 @@ public class StorageProxy implements StorageProxyMBean
                     // (1.1 knows how to forward old-style String message IDs; updated to int in 2.0)
                     if (localDataCenter.equals(dc))
                     {
-                        logger.info("Running from local datacenter");
                         if (localDc == null)
                             localDc = new ArrayList<>(targetsSize);
 
@@ -1387,7 +1386,6 @@ public class StorageProxy implements StorageProxyMBean
 
         if (dcGroups != null)
         {
-            logger.warn("Sending data to non-dc group, this is not implemented for the CAS app yet");
             // for each datacenter, send the message to one node to relay the write to other replicas
             for (Collection<InetAddressAndPort> dcTargets : dcGroups.values())
                 sendMessagesToNonlocalDC(message, dcTargets, responseHandler);
