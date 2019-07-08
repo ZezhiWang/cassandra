@@ -73,7 +73,7 @@ public class PersonalizedLogger {
 
     public void readTag(long num) {
         synchronized (obj5) {
-            String name = filePrefix + "ReadTag.txt";
+            String name = absPath + filePrefix + "ReadTag.txt";
             FileWriter writer = null;
             try
             {
