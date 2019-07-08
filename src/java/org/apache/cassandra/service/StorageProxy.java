@@ -700,6 +700,24 @@ public class StorageProxy implements StorageProxyMBean
                 }
                 else
                 {
+                    //Wait for read
+                    //Build my own Command
+                    TableMetadata tableMetadata = mutation.getPartitionUpdates().iterator().next().metadata();
+
+                    int nowInSec = FBUtilities.nowInSeconds();
+                    DecoratedKey  decoratedKey =  mutation.key();
+
+                    SinglePartitionReadCommand tagValueRead = SinglePartitionReadCommand.fullPartitionRead(
+                            tableMetadata,
+                            nowInSec,
+                            decoratedKey
+                    );
+
+                    List<SinglePartitionReadCommand> l = new ArrayList<>();
+                    l.add(tagValueRead);
+
+                    fetchRows(l,consistency_level,queryStartNanoTime);
+
                     WriteType wt = mutations.size() <= 1 ? WriteType.SIMPLE : WriteType.UNLOGGED_BATCH;
                     responseHandlers.add(performWrite(mutation, consistency_level, localDataCenter, standardWritePerformer, null, wt, queryStartNanoTime));
                 }

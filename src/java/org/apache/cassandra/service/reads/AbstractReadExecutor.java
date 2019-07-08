@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
+import org.apache.cassandra.service.PersonalizedLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -376,6 +377,8 @@ public abstract class AbstractReadExecutor
      */
     public void awaitResponses() throws ReadTimeoutException
     {
+        PersonalizedLogger pl = PersonalizedLogger.getLogTime();
+        long start = System.nanoTime();
         try
         {
             handler.awaitResults();
@@ -391,6 +394,8 @@ public abstract class AbstractReadExecutor
                 throw e;
             }
         }
+        long endTime = System.nanoTime();
+        pl.readTag(endTime - start);
 
         // return immediately, or begin a read repair
         if (digestResolver.responsesMatch())
@@ -403,6 +408,7 @@ public abstract class AbstractReadExecutor
             readRepair.startRepair(digestResolver, handler.endpoints, getContactedReplicas(), this::setResult);
         }
     }
+
 
     public void awaitReadRepair() throws ReadTimeoutException
     {
